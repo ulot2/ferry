@@ -30,6 +30,14 @@ android {
     buildTypes {
         release { signingConfig signingConfigs.release }
     }
+
+    // Two editions of one app (same id, same key, so either installs over the other):
+    // standard installs from any browser; auto adds automatic sending and is installed from a computer.
+    flavorDimensions 'edition'
+    productFlavors {
+        standard { dimension 'edition' }
+        auto { dimension 'edition' }
+    }
 }
 
 dependencies {
