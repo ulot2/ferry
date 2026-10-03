@@ -2,8 +2,8 @@
 
 One world for the Android app and the Windows tray app, chosen by the owner from four directions
 (Departure board, Nautical chart, Boarding pass, Native) on the "Ferry redesign options" canvas.
-It replaces the earlier "Harbor" design. Light mode is the day chart; dark mode is a black night
-chart (owner's choice: black, not navy). Each app follows the system light/dark setting.
+It replaces the earlier "Harbor" design. Light mode is the day chart; dark mode is a soft charcoal
+night chart (the owner first chose pure black, then asked for something easier on the eyes). Each app follows the system light/dark setting.
 
 ## Idea
 Ferry draws your two devices as two harbors on a sea chart, joined by a magenta course line: the
@@ -14,21 +14,21 @@ italic labels for places.
 ## Color
 Strategy: Committed. The chart owns the top of every screen; magenta is rare and means "course" or "act".
 
-| Role | Light (day chart) | Dark (black night chart) |
+| Role | Light (day chart) | Dark (soft charcoal night chart) |
 |---|---|---|
-| Water (chart field) | `#DCEBF2` | `#0D0F11` |
-| Contour lines | `#B9D6E4`, `#C8DFEA` | `#262B30`, `#1C2024` |
-| Land | `#E9E1CC` | `#1A1916` |
-| Ground (page) | `#F2F6F8` | `#000000` |
-| Ink (text, harbors) | `#0F2A44` | `#ECEFF1` |
-| Ink, muted | `#3D5A73` | `#9AA3AB` |
+| Water (chart field) | `#DCEBF2` | `#1C2127` |
+| Contour lines | `#B9D6E4`, `#C8DFEA` | `#2C333B`, `#252B32` |
+| Land | `#E9E1CC` | `#26251F` |
+| Ground (page) | `#F2F6F8` | `#16191D` |
+| Ink (text, harbors) | `#0F2A44` | `#DDE2E6` |
+| Ink, muted | `#3D5A73` | `#A0A9B2` |
 | Course (line, labels) | `#A3125F` | `#E05AA0` |
 | Act (primary button fill) | `#A3125F`, text white | `#C2297A`, text white |
-| Rule (section line) | `#C9D9E2` | `#2A2F34` |
-| Rule (row line) | `#DCE6EC` | `#1A1D20` |
-| Chip on (filled) | `#0F2A44`, text `#F2F6F8` | `#ECEFF1`, text `#000000` |
-| Chip off (outline) | `#9DB2C2` | `#3A4046` |
-| Pill on the chart (status) | `#F2F6F8` | `#000000` |
+| Rule (section line) | `#C9D9E2` | `#2F363E` |
+| Rule (row line) | `#DCE6EC` | `#232930` |
+| Chip on (filled) | `#0F2A44`, text `#F2F6F8` | `#DDE2E6`, text `#16191D` |
+| Chip off (outline) | `#9DB2C2` | `#47505A` |
+| Pill on the chart (status) | `#F2F6F8` | `#16191D` |
 | Steady (connected dot) | `#1E8E5A` | `#4CC38A` |
 | Adrift (offline dot, errors) | `#B3261E` | `#F2B8B5` |
 

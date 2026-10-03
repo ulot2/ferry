@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
 THESIS: Ferry draws your clipboard as a sea chart: two harbors and the course between them. It answers "is the link up, what crossed last" at a glance and refuses the stock list-of-settings screen.
-OWN-WORLD: Nautical chart. Day: blue shallows, buff land, ink-navy harbors. Night: a black chart with grey contours. Magenta is the course and the one action. Italic Barlow names places.
+OWN-WORLD: Nautical chart. Day: blue shallows, buff land, ink-navy harbors. Night: a soft charcoal chart with grey contours. Magenta is the course and the one action. Italic Barlow names places.
 STORY: The user glances at the chart and the last crossing, trusts the link, taps Send if needed, scrolls the logbook to copy something again.
 FIRST VIEWPORT: The chart (wordmark top left, status pill top right, harbors and course) runs under the status bar; under it the last crossing in large type, then the magenta Send button.
-FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure board, Nautical chart, Boarding pass, Native), with a black night mode the owner asked for.
+FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure board, Nautical chart, Boarding pass, Native), with a soft charcoal night mode.
 -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/scroll"

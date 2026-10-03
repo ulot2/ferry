@@ -7,10 +7,10 @@ namespace Ferry;
 
 /*
 THESIS: The laptop side of the same sea chart: two harbors and the course between them, then the logbook. Pairing by QR is the one job this window has before a phone is paired.
-OWN-WORLD: Nautical chart. Day: blue shallows, buff land, ink-navy harbors; night: a black chart with grey contours. Magenta is the course and the one action. Barlow, italic for places. Title bar painted in the water color.
+OWN-WORLD: Nautical chart. Day: blue shallows, buff land, ink-navy harbors; night: a soft charcoal chart with grey contours. Magenta is the course and the one action. Barlow, italic for places. Title bar painted in the water color.
 STORY: First run: scan the code, see "Phone paired". Later: glance at the chart and the last crossing, double-click a logbook entry to copy it again, flip a chip.
 FIRST VIEWPORT: Chart band (wordmark left, status pill right, harbors and course); under it the last crossing; then the logbook or the QR plate.
-FORM: Owner-chosen "Nautical chart" from the four-direction canvas, same as the phone, with a black night mode.
+FORM: Owner-chosen "Nautical chart" from the four-direction canvas, same as the phone, with a soft charcoal night mode.
 */
 
 /// <summary>The Ferry window: the chart band, the last crossing, and the logbook or the pairing code. See DESIGN.md.</summary>

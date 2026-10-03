@@ -6,31 +6,31 @@ using Microsoft.Win32;
 
 namespace Ferry;
 
-/// <summary>The Nautical chart palette (day, and a black night chart), the Barlow font, and drawing helpers. See DESIGN.md.</summary>
+/// <summary>The Nautical chart palette (day, and a soft charcoal night chart), the Barlow font, and drawing helpers. See DESIGN.md.</summary>
 static class Chart
 {
     public static readonly bool Dark = Registry.GetValue(
         @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1) is 0;
 
-    public static readonly Color Water = Dark ? Hex(0x0D0F11) : Hex(0xDCEBF2);
-    public static readonly Color Contour1 = Dark ? Hex(0x262B30) : Hex(0xB9D6E4);
-    public static readonly Color Contour2 = Dark ? Hex(0x1C2024) : Hex(0xC8DFEA);
-    public static readonly Color Land = Dark ? Hex(0x1A1916) : Hex(0xE9E1CC);
-    public static readonly Color Ground = Dark ? Hex(0x000000) : Hex(0xF2F6F8);
-    public static readonly Color Ink = Dark ? Hex(0xECEFF1) : Hex(0x0F2A44);
-    public static readonly Color InkMuted = Dark ? Hex(0x9AA3AB) : Hex(0x3D5A73);
+    public static readonly Color Water = Dark ? Hex(0x1C2127) : Hex(0xDCEBF2);
+    public static readonly Color Contour1 = Dark ? Hex(0x2C333B) : Hex(0xB9D6E4);
+    public static readonly Color Contour2 = Dark ? Hex(0x252B32) : Hex(0xC8DFEA);
+    public static readonly Color Land = Dark ? Hex(0x26251F) : Hex(0xE9E1CC);
+    public static readonly Color Ground = Dark ? Hex(0x16191D) : Hex(0xF2F6F8);
+    public static readonly Color Ink = Dark ? Hex(0xDDE2E6) : Hex(0x0F2A44);
+    public static readonly Color InkMuted = Dark ? Hex(0xA0A9B2) : Hex(0x3D5A73);
     public static readonly Color Course = Dark ? Hex(0xE05AA0) : Hex(0xA3125F);
     public static readonly Color Act = Dark ? Hex(0xC2297A) : Hex(0xA3125F);
     public static readonly Color ActPressed = Dark ? Hex(0xA3125F) : Hex(0x7A0D47);
-    public static readonly Color Rule = Dark ? Hex(0x2A2F34) : Hex(0xC9D9E2);
-    public static readonly Color RuleRow = Dark ? Hex(0x1A1D20) : Hex(0xDCE6EC);
-    public static readonly Color ChipOn = Dark ? Hex(0xECEFF1) : Hex(0x0F2A44);
-    public static readonly Color ChipOnText = Dark ? Hex(0x000000) : Hex(0xF2F6F8);
-    public static readonly Color ChipOff = Dark ? Hex(0x3A4046) : Hex(0x9DB2C2);
-    public static readonly Color Pill = Dark ? Hex(0x000000) : Hex(0xF2F6F8);
+    public static readonly Color Rule = Dark ? Hex(0x2F363E) : Hex(0xC9D9E2);
+    public static readonly Color RuleRow = Dark ? Hex(0x232930) : Hex(0xDCE6EC);
+    public static readonly Color ChipOn = Dark ? Hex(0xDDE2E6) : Hex(0x0F2A44);
+    public static readonly Color ChipOnText = Dark ? Hex(0x16191D) : Hex(0xF2F6F8);
+    public static readonly Color ChipOff = Dark ? Hex(0x47505A) : Hex(0x9DB2C2);
+    public static readonly Color Pill = Dark ? Hex(0x16191D) : Hex(0xF2F6F8);
     public static readonly Color Steady = Dark ? Hex(0x4CC38A) : Hex(0x1E8E5A);
     public static readonly Color Adrift = Dark ? Hex(0xF2B8B5) : Hex(0xB3261E);
-    public static readonly Color Hover = Dark ? Hex(0x15181B) : Hex(0xE3ECF1);
+    public static readonly Color Hover = Dark ? Hex(0x222830) : Hex(0xE3ECF1);
 
     // The tray and window icon keep the day chart in both themes, like the phone's launcher icon.
     static readonly Color IconWater = Hex(0xDCEBF2), IconInk = Hex(0x0F2A44), IconCourse = Hex(0xA3125F);
