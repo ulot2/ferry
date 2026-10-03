@@ -109,6 +109,20 @@ sealed class MainWindow : Form
         Harbor.NavyTitleBar(Handle);
     }
 
+    // DeviceDpi is only right once the window exists, so size the window again here and on monitor changes.
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        Render();
+        CenterToScreen();
+    }
+
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        Render();
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (e.CloseReason == CloseReason.UserClosing)
