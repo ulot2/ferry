@@ -1,12 +1,14 @@
 package app.ferry;
 
-import android.content.ComponentName;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ServiceInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import android.view.accessibility.AccessibilityManager;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -121,12 +123,19 @@ final class Ferry {
         return c.getResources().getBoolean(R.bool.has_auto_send);
     }
 
+    /**
+     * Asks Android which accessibility services are on, instead of reading the raw setting:
+     * some phones (Xiaomi) store the name in a short form that a text match misses.
+     */
     static boolean autoSendOn(Context c) {
         if (!autoEdition(c)) return false;
-        // By name: AutoSendService only exists in the auto edition's sources.
-        String service = new ComponentName(c.getPackageName(), "app.ferry.AutoSendService").flattenToString();
-        String on = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        return on != null && on.contains(service);
+        AccessibilityManager am = c.getSystemService(AccessibilityManager.class);
+        for (AccessibilityServiceInfo s : am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)) {
+            ServiceInfo info = s.getResolveInfo().serviceInfo;
+            // By name: AutoSendService only exists in the auto edition's sources.
+            if (c.getPackageName().equals(info.packageName) && info.name.endsWith(".AutoSendService")) return true;
+        }
+        return false;
     }
 
     /** Encrypts and sends text to the laptop. Blocks, so call it off the main thread. */

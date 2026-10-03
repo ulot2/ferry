@@ -5,6 +5,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Toast;
 
 import java.io.IOException;
@@ -35,10 +36,12 @@ public class SendActivity extends Activity {
         ClipData clip = getSystemService(ClipboardManager.class).getPrimaryClip();
         CharSequence text = clip == null || clip.getItemCount() == 0 ? null : clip.getItemAt(0).coerceToText(this);
         if (text == null || text.length() == 0) {
+            Log.i("Ferry", "send screen: clipboard empty or unreadable");
             done(auto ? null : "Clipboard is empty");
             return;
         }
         if (auto && text.toString().equals(Ferry.lastText(this))) {
+            Log.i("Ferry", "send screen: already crossed, not sending again");
             done(null);   // already crossed (for example, it came from the laptop)
             return;
         }
@@ -63,7 +66,9 @@ public class SendActivity extends Activity {
                 Ferry.send(this, text, "phone");
                 Ferry.crossed(this, Ferry.TO_LAPTOP, text, System.currentTimeMillis());
                 result = "Sent to laptop";
+                Log.i("Ferry", "send screen: sent");
             } catch (IOException e) {
+                Log.w("Ferry", "send screen: not sent: " + e);
                 result = "Not sent. Ferry could not reach ntfy.sh. Try again when you are online.";
             }
             String r = result;
