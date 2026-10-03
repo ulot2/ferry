@@ -28,7 +28,7 @@ Download both files from the latest release on the [Releases page](../../release
 1. Download `Ferry.exe` and put it in a permanent folder, for example `%LOCALAPPDATA%\Programs\Ferry`.
 2. Open `Ferry.exe`. If Windows shows "Windows protected your PC", click **More info**, then **Run anyway**. Windows shows this message because Ferry is not signed with a paid certificate.
 
-Ferry opens a window with a QR code. It also adds an icon to the system tray (the icons near the clock) and starts with Windows. You do not need to install anything else.
+Ferry opens a window with a QR code. It also adds an icon to the system tray (the icons near the clock), adds **Ferry** to the Start menu, and starts with Windows. You do not need to install anything else.
 
 ### On the phone
 
@@ -144,6 +144,8 @@ Your pairing and history stay after an update.
 - The QR scanner needs Google Play services. On a phone without them, type the code.
 
 ## Troubleshooting
+
+**I cannot find the Ferry icon on the laptop.** Windows 11 can hide new tray icons. Click the **^** arrow next to the clock. If Ferry is not there, it is not running: open **Ferry** from the Start menu. (**Quit Ferry** closes it completely.)
 
 **The light is red.** Make sure that the device is online. Ferry connects again by itself.
 

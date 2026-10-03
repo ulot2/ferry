@@ -46,6 +46,7 @@ sealed class TrayApp : ApplicationContext
             Settings.Save();
         }
         if (firstRun) StartWithWindows = true;
+        StartMenuShortcut();
 
         pauseItem.Checked = Settings.Paused;
         pauseItem.CheckedChanged += (_, _) => Paused = pauseItem.Checked;
@@ -134,6 +135,27 @@ sealed class TrayApp : ApplicationContext
             if (value) key.SetValue("Ferry", $"\"{Environment.ProcessPath}\"");
             else key.DeleteValue("Ferry", false);
             autostartItem.Checked = value;
+        }
+    }
+
+    /// <summary>
+    /// Keeps a "Ferry" entry in the Start menu, so Ferry can be opened again after Quit.
+    /// Written on every start, so it follows Ferry.exe if the file moves.
+    /// </summary>
+    static void StartMenuShortcut()
+    {
+        string link = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Ferry.lnk");
+        try
+        {
+            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+            dynamic shortcut = shell.CreateShortcut(link);
+            shortcut.TargetPath = Environment.ProcessPath;
+            shortcut.Description = "Ferry: clipboard between this laptop and your phone";
+            shortcut.Save();
+        }
+        catch (Exception)
+        {
+            // Late-bound COM can fail in several ways (COM, binder, IO). A missing shortcut must never stop Ferry from starting.
         }
     }
 
