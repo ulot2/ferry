@@ -60,10 +60,16 @@ final class Ferry {
         // Tell the laptop who just paired. Failure is fine: the first real send proves the link too.
         new Thread(() -> {
             try {
-                send(c, Build.MODEL, "phone,pair");
+                send(c, deviceName(c), "phone,pair");
             } catch (IOException ignored) {
             }
         }).start();
+    }
+
+    /** The phone's name from Settings > About phone ("Redmi Note 14"), not the model code ("24117RN76G"). */
+    static String deviceName(Context c) {
+        String name = Settings.Global.getString(c.getContentResolver(), Settings.Global.DEVICE_NAME);
+        return name == null || name.trim().isEmpty() ? Build.MODEL : name.trim();
     }
 
     static void unpair(Context c) {
