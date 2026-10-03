@@ -36,10 +36,13 @@ public class AutoSendService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent e) {
         CharSequence app = e.getPackageName();
         if (app == null || getPackageName().contentEquals(app) || !Ferry.paired(this)) return;
+        count(app, e.getEventType());
         String why = copySignal(e);
         // Diagnostics for "adb logcat -s Ferry": the app and the kind of event, never the copied text.
         // Window changes are only logged when they match, so the log does not list every app you open.
-        if (why != null || e.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        int type = e.getEventType();
+        if (why != null || type == AccessibilityEvent.TYPE_VIEW_CLICKED || type == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED
+                || type == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
             Log.d(TAG, "event " + AccessibilityEvent.eventTypeToString(e.getEventType()) + " in " + app
                     + " class=" + e.getClassName() + " -> " + (why == null ? "ignored" : why));
         }
@@ -58,6 +61,19 @@ public class AutoSendService extends AccessibilityService {
                 Log.w(TAG, "could not open the send screen: " + ex);
             }
         }, 300);
+    }
+
+    // ponytail: temporary diagnostics while finding out why copy taps do not arrive on Xiaomi; remove with typeAllMask.
+    private final java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
+    private long countsSince = SystemClock.uptimeMillis();
+
+    /** Logs, every 5 seconds, how many events of each type arrived from each app. Counts only, no content. */
+    private void count(CharSequence app, int type) {
+        counts.merge(app + " " + AccessibilityEvent.eventTypeToString(type), 1, Integer::sum);
+        if (SystemClock.uptimeMillis() - countsSince < 5000) return;
+        Log.d(TAG, "event counts: " + counts);
+        counts.clear();
+        countsSince = SystemClock.uptimeMillis();
     }
 
     /** Returns why this event means "something was just copied", or null. */
