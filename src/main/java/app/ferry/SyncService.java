@@ -1,5 +1,19 @@
 package app.ferry;
 
+import android.Manifest;
+import android.content.ContentResolver;
+import android.content.ContentUris;
+import android.content.pm.PackageManager;
+import android.database.ContentObserver;
+import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.provider.MediaStore;
+import android.util.Log;
+import java.io.File;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -33,6 +47,8 @@ public class SyncService extends Service {
     private volatile HttpURLConnection con;
     private Thread worker;
     private volatile String label = "Connecting…";
+    private ContentObserver screenshots;
+    private long lastScreenshot;   // MediaStore id of the last screenshot sent
 
     static void start(Context c) {
         c.startForegroundService(new Intent(c, SyncService.class));
@@ -48,6 +64,7 @@ public class SyncService extends Service {
             running = true;
             worker = new Thread(this::loop, "ferry-sync");
             worker.start();
+            watchScreenshots();
         }
         return START_STICKY;
     }
@@ -56,6 +73,7 @@ public class SyncService extends Service {
     public void onDestroy() {
         running = false;
         Ferry.status(this, Ferry.STATUS_OFFLINE);
+        if (screenshots != null) getContentResolver().unregisterContentObserver(screenshots);
         HttpURLConnection c = con;
         if (c != null) c.disconnect();   // unblocks the read in loop()
     }
@@ -86,6 +104,10 @@ public class SyncService extends Service {
                     if (!"message".equals(m.optString("event"))) continue;
                     Ferry.prefs(this).edit().putString("last_id", m.optString("id")).apply();
                     if (hasTag(m, "phone")) continue;   // our own message coming back
+                    if (hasTag(m, "image")) {
+                        receiveImage(code, m);
+                        continue;
+                    }
                     String sealed = m.has("attachment") ? fetchText(m.getJSONObject("attachment")) : m.optString("message");
                     String text = Crypto.open(code, sealed);   // null: not from our laptop, ignore it
                     if (text == null || text.isEmpty()) continue;
@@ -108,6 +130,90 @@ public class SyncService extends Service {
                 if (c != null) c.disconnect();
             }
         }
+    }
+
+    /** An image from the laptop: a sealed file on ntfy.sh. Errors stay here, so the text connection keeps running. */
+    private void receiveImage(String code, JSONObject m) {
+        if (!Ferry.imagesOn(this)) return;
+        JSONObject att = m.optJSONObject("attachment");
+        if (att == null || !att.optString("url").startsWith(Ferry.SERVER) || att.optLong("size") > 16L * 1024 * 1024) return;
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(att.getString("url")).openConnection();
+            c.setConnectTimeout(15_000);
+            c.setReadTimeout(120_000);
+            byte[] sealed;
+            try (InputStream s = c.getInputStream()) {
+                sealed = Ferry.readBytes(s, 16 * 1024 * 1024);
+            } finally {
+                c.disconnect();
+            }
+            byte[] image = Crypto.openImage(code, sealed);
+            if (image == null) return;   // not from our laptop
+            long at = m.optLong("time", System.currentTimeMillis() / 1000) * 1000;
+            File file = Images.keep(this, image);
+            Ferry.crossed(this, Ferry.TO_PHONE, "Image", at, file.getAbsolutePath());
+            if (System.currentTimeMillis() - at < 10 * 60_000) {
+                main.post(() -> getSystemService(ClipboardManager.class).setPrimaryClip(Images.clip(this, file)));
+                String peer = Ferry.prefs(this).getString("peer", "");
+                notifyCrossing("Image from " + (peer.isEmpty() ? "your laptop" : peer), "In your clipboard and in Pictures/Ferry", preview(file));
+            }
+        } catch (Exception e) {
+            Log.w("Ferry", "image not received: " + e);
+        }
+    }
+
+    static boolean canReadPhotos(Context c) {
+        String p = Build.VERSION.SDK_INT >= 33 ? Manifest.permission.READ_MEDIA_IMAGES : Manifest.permission.READ_EXTERNAL_STORAGE;
+        return c.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /** Opt-in: send each new screenshot. Android does not put screenshots on the clipboard, so Ferry watches for new ones. */
+    private void watchScreenshots() {
+        if (!Ferry.screenshotsOn(this) || !canReadPhotos(this)) return;
+        screenshots = new ContentObserver(main) {
+            @Override
+            public void onChange(boolean selfChange, Uri uri) {
+                new Thread(SyncService.this::sendNewScreenshot).start();
+            }
+        };
+        getContentResolver().registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, screenshots);
+    }
+
+    private synchronized void sendNewScreenshot() {
+        Bundle q = new Bundle();
+        q.putString(ContentResolver.QUERY_ARG_SQL_SELECTION, MediaStore.Images.Media.RELATIVE_PATH + " LIKE ? AND "
+                + MediaStore.Images.Media.DATE_ADDED + " >= ? AND " + MediaStore.Images.Media.IS_PENDING + " = 0");
+        q.putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS,
+                new String[]{"%Screenshots%", String.valueOf(System.currentTimeMillis() / 1000 - 20)});
+        q.putStringArray(ContentResolver.QUERY_ARG_SORT_COLUMNS, new String[]{MediaStore.Images.Media.DATE_ADDED});
+        q.putInt(ContentResolver.QUERY_ARG_SORT_DIRECTION, ContentResolver.QUERY_SORT_DIRECTION_DESCENDING);
+        q.putInt(ContentResolver.QUERY_ARG_LIMIT, 1);
+        try (Cursor cur = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                new String[]{MediaStore.Images.Media._ID}, q, null)) {
+            if (cur == null || !cur.moveToFirst()) return;
+            long id = cur.getLong(0);
+            if (id == lastScreenshot) return;   // one screenshot fires several changes
+            lastScreenshot = id;
+            byte[] image = Images.read(this, ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id));
+            image = image == null ? null : Images.shrink(image);
+            if (image == null) return;
+            Ferry.sendImage(this, image, "phone");
+            Ferry.crossed(this, Ferry.TO_LAPTOP, "Screenshot", System.currentTimeMillis(), "");
+            String peer = Ferry.prefs(this).getString("peer", "");
+            notifyCrossing("Screenshot sent to " + (peer.isEmpty() ? "your laptop" : peer), "It is in the laptop's clipboard", null);
+        } catch (Exception e) {
+            Log.w("Ferry", "screenshot not sent: " + e);
+        }
+    }
+
+    /** A small preview for the notification, without loading a full-size image. */
+    private static Bitmap preview(File file) {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(file.getPath(), o);
+        o.inSampleSize = Math.max(1, Math.max(o.outWidth, o.outHeight) / 720);
+        o.inJustDecodeBounds = false;
+        return BitmapFactory.decodeFile(file.getPath(), o);
     }
 
     private static boolean hasTag(JSONObject m, String tag) {
@@ -134,20 +240,25 @@ public class SyncService extends Service {
 
     /** A short pop-up (no sound) saying what just landed in the clipboard. It clears itself after 8 seconds. */
     private void announce(String text) {
+        String peer = Ferry.prefs(this).getString("peer", "");
+        notifyCrossing("Copied from " + (peer.isEmpty() ? "your laptop" : peer), Ferry.preview(text), null);
+    }
+
+    private void notifyCrossing(String title, String text, Bitmap picture) {
         NotificationManager nm = getSystemService(NotificationManager.class);
-        NotificationChannel ch = new NotificationChannel(CROSSINGS, "Copies from your laptop", NotificationManager.IMPORTANCE_HIGH);
+        NotificationChannel ch = new NotificationChannel(CROSSINGS, "Crossings", NotificationManager.IMPORTANCE_HIGH);
         ch.setSound(null, null);
         ch.enableVibration(false);
         nm.createNotificationChannel(ch);
-        String peer = Ferry.prefs(this).getString("peer", "");
-        nm.notify(2, new Notification.Builder(this, CROSSINGS)
+        Notification.Builder b = new Notification.Builder(this, CROSSINGS)
                 .setSmallIcon(R.drawable.ic_tile)
-                .setContentTitle("Copied from " + (peer.isEmpty() ? "your laptop" : peer))
-                .setContentText(Ferry.preview(text))
+                .setContentTitle(title)
+                .setContentText(text)
                 .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE))
                 .setAutoCancel(true)
-                .setTimeoutAfter(8_000)
-                .build());
+                .setTimeoutAfter(8_000);
+        if (picture != null) b.setLargeIcon(picture).setStyle(new Notification.BigPictureStyle().bigPicture(picture));
+        nm.notify(2, b.build());
     }
 
     private void state(String status, String label) {

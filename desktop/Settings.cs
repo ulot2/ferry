@@ -2,7 +2,8 @@ using System.Text.Json;
 
 namespace Ferry;
 
-record Crossing(string Direction, string Text, DateTime Time);
+/// <summary>One transfer. ImagePath is null for text; for an image it is the saved file, or "" when none was saved (sent images).</summary>
+record Crossing(string Direction, string Text, DateTime Time, string? ImagePath = null);
 
 /// <summary>Saved in %APPDATA%\Ferry\settings.json (only this Windows user can read it).</summary>
 sealed class Settings
@@ -11,6 +12,7 @@ sealed class Settings
     public string Peer { get; set; } = "";   // model of the paired phone; empty = not paired yet
     public bool Paused { get; set; }
     public bool Popups { get; set; } = true;
+    public bool Images { get; set; } = true;
     public string LastId { get; set; } = "";   // last ntfy.sh message seen, so a restart catches up on what it missed
     public List<Crossing> History { get; set; } = [];   // newest first
 

@@ -1,6 +1,6 @@
 # Ferry
 
-Ferry moves clipboard text between a Windows laptop and an Android phone.
+Ferry moves clipboard text and images between a Windows laptop and an Android phone.
 
 When you copy text on the laptop, the text goes into the clipboard of the phone within a second or two. When you copy text on the phone, Ferry sends it to the laptop with one tap, or by itself in Ferry Auto. You do not need an account. The two devices pair when the phone scans a QR code, and all text is encrypted end to end (only your two devices can read it).
 
@@ -119,6 +119,30 @@ If the switch is greyed out, Android blocks it because the app did not come from
 
 Automatic sending works for Copy buttons with a label such as "Copy" or "Copy link" (in the language of the phone or in English). If an app uses a Copy icon without any label, use **Send clipboard**.
 
+## Images
+
+Ferry moves images too. Images are encrypted the same way as text.
+
+| To send | Do this |
+|---|---|
+| Laptop to phone | Copy an image, or take a screenshot with **Win+Shift+S** or **PrtScn**. It goes into the phone clipboard and into **Pictures/Ferry** on the phone. |
+| Phone to laptop, a copied image | Copy the image (for example **Copy image** in Chrome). Ferry Auto sends it by itself. In Ferry, tap **Send clipboard**. |
+| Phone to laptop, any image | Tap **Share** and choose **Send to laptop**. |
+| Phone to laptop, screenshots | Turn on **Send screenshots automatically** in Ferry (see below). |
+
+On the laptop, an image from the phone goes into the clipboard (press **Ctrl+V** to paste) and into **Pictures\Ferry**.
+
+**Send screenshots automatically** is off until you turn it on, because screenshots can show private things. When you turn it on, Android asks for the Photos permission. Choose **Allow all**: with "Allow limited access", Ferry cannot see new screenshots.
+
+To stop images in either direction, turn off **Images** in Ferry on the phone, or **Send and receive images** on the laptop.
+
+Limits for images:
+
+- Ferry makes an image smaller before it sends it when the file is larger than 1.5 MB. It saves the image as a JPEG of at most 2560 pixels on the long side.
+- Ferry does not send an image that is still larger than 10 MB.
+- On a slow connection, an image takes a few seconds.
+- ntfy.sh keeps image files for 3 hours. A device that is offline for longer does not get the image.
+
 ## Updates
 
 Both apps look for a newer release on GitHub:
@@ -139,7 +163,7 @@ Your pairing and history stay after an update.
 
 ## Limits
 
-- Ferry moves text only. It skips images and files.
+- Ferry moves text and images. It does not move other files.
 - ntfy.sh limits one message to 4,096 bytes. Ferry sends longer text as a text file, and the other device reads the file.
 - The QR scanner needs Google Play services. On a phone without them, type the code.
 

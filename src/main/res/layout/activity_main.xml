@@ -232,6 +232,42 @@ FORM: Owner-pinned "Harbor" direction (chosen in the question round, no seed rol
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Images: both ways, and the opt-in screenshot sending. -->
+        <LinearLayout
+            android:id="@+id/imagesCard"
+            style="@style/Ferry.Card"
+            android:visibility="gone">
+
+            <Switch
+                android:id="@+id/imagesSwitch"
+                style="@style/Ferry.CardTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="Images" />
+
+            <TextView
+                style="@style/Ferry.Body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Images you copy on the laptop land in this phone's clipboard and in Pictures/Ferry. To send an image from here, copy it or share it to Send to laptop." />
+
+            <Switch
+                android:id="@+id/screenshotsSwitch"
+                style="@style/Ferry.CardTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:minHeight="48dp"
+                android:text="Send screenshots automatically" />
+
+            <TextView
+                android:id="@+id/screenshotsBody"
+                style="@style/Ferry.Body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
         <!-- Earlier crossings: rows are added in code from res/layout/item_crossing.xml. -->
         <LinearLayout
             android:id="@+id/historyCard"

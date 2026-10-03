@@ -21,6 +21,7 @@ import android.view.WindowInsets;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,12 +39,15 @@ import java.util.Locale;
 /** The terminal screen: link status, last crossing, Send, history, pairing, and notices. See DESIGN.md. */
 public class MainActivity extends Activity implements SharedPreferences.OnSharedPreferenceChangeListener {
     private static final String FERRY_AUTO_HELP = "https://github.com/ulot2/ferry#ferry-auto-automatic-sending";
-    private View header, lamp, ticket, manualRow, batteryCard, xiaomiCard, updateCard, autoCard, historyCard, autoAppInfo;
+    private static final int PHOTOS = 1;
+    private View header, lamp, ticket, manualRow, batteryCard, xiaomiCard, updateCard, autoCard, historyCard, autoAppInfo, imagesCard;
     private TextView statusText, headerLine, route, preview, stubTime, stubDay, pairTitle, pairBody, pairError,
-            updateTitle, updateBody, autoTitle, autoBody;
+            updateTitle, updateBody, autoTitle, autoBody, screenshotsBody;
     private Button send, scan, pairAlt, autoToggle, updateButton;
     private ViewGroup historyList;
     private EditText codeField;
+    private Switch imagesSwitch, screenshotsSwitch;
+    private boolean rendering;   // true while render() sets switches, so their listeners ignore it
     private int headerTop;
 
     @Override
@@ -82,6 +86,10 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         autoToggle = findViewById(R.id.autoToggle);
         historyList = findViewById(R.id.historyList);
         codeField = findViewById(R.id.topic);
+        imagesCard = findViewById(R.id.imagesCard);
+        imagesSwitch = findViewById(R.id.imagesSwitch);
+        screenshotsSwitch = findViewById(R.id.screenshotsSwitch);
+        screenshotsBody = findViewById(R.id.screenshotsBody);
 
         // Edge to edge: the navy header runs under the status bar; the list clears the navigation bar.
         headerTop = header.getPaddingTop();
@@ -108,8 +116,24 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             manualRow.setVisibility(View.GONE);
             render();
         });
-        findViewById(R.id.clearHistory).setOnClickListener(v -> Ferry.clearHistory(this));
-        // Ferry Auto cannot be installed from the phone (Play Protect), so its buttons lead to the computer steps instead.
+        imagesSwitch.setOnCheckedChangeListener((v, on) -> {
+            if (rendering) return;
+            Ferry.prefs(this).edit().putBoolean("images", on).apply();
+            restartSync();
+        });
+        screenshotsSwitch.setOnCheckedChangeListener((v, on) -> {
+            if (rendering) return;
+            if (on && !SyncService.canReadPhotos(this)) {
+                // Ask first; the switch turns on in onRequestPermissionsResult if allowed.
+                screenshotsSwitch.setChecked(false);
+                requestPermissions(new String[]{Build.VERSION.SDK_INT >= 33
+                        ? Manifest.permission.READ_MEDIA_IMAGES : Manifest.permission.READ_EXTERNAL_STORAGE}, PHOTOS);
+                return;
+            }
+            Ferry.prefs(this).edit().putBoolean("screenshots", on).apply();
+            restartSync();
+        });
+        findViewById(R.id.clearHistory).setOnClickListener(v -> Ferry.clearHistory(this));        // Ferry Auto cannot be installed from the phone (Play Protect), so its buttons lead to the computer steps instead.
         boolean autoEdition = Ferry.autoEdition(this);
         findViewById(R.id.update).setOnClickListener(v -> open(autoEdition ? FERRY_AUTO_HELP : Ferry.prefs(this).getString("update_url", "")));
         autoToggle.setOnClickListener(v -> {
@@ -235,7 +259,9 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         } else {
             long at = last.optLong("at");
             route.setText(last.optString("dir"));
-            preview.setText("“" + Ferry.preview(last.optString("text")) + "”");
+preview.setText(!last.has("image") ? "“" + Ferry.preview(last.optString("text")) + "”"
+                    : Ferry.TO_PHONE.equals(last.optString("dir")) ? last.optString("text") + ", in your clipboard and in Pictures/Ferry"
+                    : last.optString("text") + ", in the laptop's clipboard");
             // Big figures only ("5:36"); a 12-hour clock's AM/PM moves to the small line, so the time always fits the stub.
             boolean h24 = android.text.format.DateFormat.is24HourFormat(this);
             stubTime.setText(android.text.format.DateFormat.format(h24 ? "H:mm" : "h:mm", at));
@@ -292,8 +318,17 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             autoAppInfo.setVisibility(View.GONE);
         }
 
-        PowerManager pm = getSystemService(PowerManager.class);
-        batteryCard.setVisibility(paired && !pm.isIgnoringBatteryOptimizations(getPackageName()) ? View.VISIBLE : View.GONE);
+        imagesCard.setVisibility(paired ? View.VISIBLE : View.GONE);
+        rendering = true;
+        imagesSwitch.setChecked(Ferry.imagesOn(this));
+        screenshotsSwitch.setEnabled(Ferry.imagesOn(this));
+        screenshotsSwitch.setChecked(Ferry.screenshotsOn(this) && SyncService.canReadPhotos(this));
+        rendering = false;
+        screenshotsBody.setText(!SyncService.canReadPhotos(this) && p.getBoolean("screenshots", false)
+                ? "Ferry needs the Photos permission set to \"Allow all\" to notice new screenshots. Open App info > Permissions > Photos."
+                : "Each new screenshot goes to the laptop's clipboard by itself. It stays off until you turn it on, because screenshots can show private things.");
+
+        PowerManager pm = getSystemService(PowerManager.class);        batteryCard.setVisibility(paired && !pm.isIgnoringBatteryOptimizations(getPackageName()) ? View.VISIBLE : View.GONE);
         String maker = Build.MANUFACTURER.toLowerCase(Locale.ROOT);
         boolean xiaomi = maker.contains("xiaomi") || maker.contains("redmi") || maker.contains("poco");
         xiaomiCard.setVisibility(paired && xiaomi ? View.VISIBLE : View.GONE);
@@ -313,19 +348,46 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             String when = DateUtils.isToday(at) ? time.format(new Date(at))
                     : DateUtils.formatDateTime(this, at, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH);
             ((TextView) row.findViewById(R.id.itemMeta)).setText(item.optString("dir") + "  ·  " + when);
-            ((TextView) row.findViewById(R.id.itemText)).setText(Ferry.preview(text));
-            row.setContentDescription("Copy again: " + Ferry.preview(text));
-            row.setOnClickListener(v -> copyAgain(text));
+            String image = item.optString("image", null);
+            ((TextView) row.findViewById(R.id.itemText)).setText(image != null ? text : Ferry.preview(text));
+            row.setContentDescription("Copy again: " + (image != null ? text : Ferry.preview(text)));
+            row.setOnClickListener(v -> {
+                if (image == null) copyAgain(text);
+                else copyImageAgain(image);
+            });
             historyList.addView(row);
         }
     }
 
-    private void open(String url) {
-        if (!url.isEmpty()) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+    @Override
+    public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(request, permissions, results);
+        if (request != PHOTOS) return;
+        boolean allowed = SyncService.canReadPhotos(this);
+        Ferry.prefs(this).edit().putBoolean("screenshots", allowed).apply();
+        if (allowed) restartSync();
+        render();
     }
 
-    private void copyAgain(String text) {
-        Ferry.prefs(this).edit().putString("last_text", text).apply();   // so automatic sending does not send it back
+    private void restartSync() {
+        stopService(new Intent(this, SyncService.class));
+        SyncService.start(this);
+    }
+
+    private void open(String url) {        if (!url.isEmpty()) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+    }
+
+    private void copyImageAgain(String path) {
+        java.io.File file = new java.io.File(path);
+        if (path.isEmpty() || !file.isFile()) {
+            Toast.makeText(this, path.isEmpty() ? "Only images that came to this phone can be copied again here" : "That image is no longer kept. Find it in Pictures/Ferry.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        getSystemService(ClipboardManager.class).setPrimaryClip(Images.clip(this, file));
+        if (Build.VERSION.SDK_INT < 33) Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
+    }
+
+    private void copyAgain(String text) {        Ferry.prefs(this).edit().putString("last_text", text).apply();   // so automatic sending does not send it back
         getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("Ferry", text));
         if (Build.VERSION.SDK_INT < 33) Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();   // Android 13+ shows its own
     }

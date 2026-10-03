@@ -88,16 +88,37 @@ final class Ferry {
         return prefs(c).getString("last_text", "");
     }
 
+    /** Images both ways (on unless turned off). */
+    static boolean imagesOn(Context c) {
+        return prefs(c).getBoolean("images", true);
+    }
+
+    /** Send new screenshots by themselves (off unless turned on; needs the Photos permission). */
+    static boolean screenshotsOn(Context c) {
+        return imagesOn(c) && prefs(c).getBoolean("screenshots", false);
+    }
+
     /** Adds a crossing to the top of the history (newest first, 10 kept). */
-    static synchronized void crossed(Context c, String direction, String text, long at) {
+    static void crossed(Context c, String direction, String text, long at) {
+        crossed(c, direction, text, at, null);
+    }
+
+    /** For images, text is a short label ("Image", "Screenshot") and image is the kept file path, or "" when none was kept. */
+    static synchronized void crossed(Context c, String direction, String text, long at, String image) {
         JSONArray old = history(c), now = new JSONArray();
         try {
-            if (text.length() <= HISTORY_MAX_CHARS) now.put(new JSONObject().put("dir", direction).put("text", text).put("at", at));
+            if (text.length() <= HISTORY_MAX_CHARS) {
+                JSONObject item = new JSONObject().put("dir", direction).put("text", text).put("at", at);
+                if (image != null) item.put("image", image);
+                now.put(item);
+            }
             for (int i = 0; i < old.length() && now.length() < HISTORY_SIZE; i++) now.put(old.get(i));
         } catch (JSONException e) {
             throw new IllegalStateException(e);   // only strings and numbers go in
         }
-        prefs(c).edit().putString("history", now.toString()).putString("last_text", text).apply();
+        SharedPreferences.Editor e = prefs(c).edit().putString("history", now.toString());
+        if (image == null) e.putString("last_text", text);   // only text can bounce back through automatic sending
+        e.apply();
     }
 
     static JSONArray history(Context c) {
@@ -164,6 +185,45 @@ final class Ferry {
         } finally {
             con.disconnect();
         }
+    }
+
+    /** Encrypts and sends an image (PNG or JPEG bytes) to the laptop as a file. Blocks; call it off the main thread. */
+    static void sendImage(Context c, byte[] image, String tags) throws IOException {
+        String code = code(c);
+        if (code.isEmpty()) throw new IOException("Not paired");
+        byte[] body;
+        try {
+            body = Crypto.sealImage(code, image);
+        } catch (GeneralSecurityException e) {
+            throw new IOException(e);
+        }
+        HttpURLConnection con = (HttpURLConnection) new URL(SERVER + Crypto.topic(code)).openConnection();
+        try {
+            con.setRequestMethod("PUT");
+            con.setDoOutput(true);
+            con.setFixedLengthStreamingMode(body.length);
+            con.setConnectTimeout(15_000);
+            con.setReadTimeout(120_000);   // a few MB on a slow connection
+            con.setRequestProperty("Filename", "image.ferry");
+            con.setRequestProperty("Tags", tags + ",image");
+            try (OutputStream out = con.getOutputStream()) {
+                out.write(body);
+            }
+            int status = con.getResponseCode();
+            if (status != 200) throw new IOException("ntfy.sh answered " + status);
+        } finally {
+            con.disconnect();
+        }
+    }
+
+    static byte[] readBytes(InputStream in, int limit) throws IOException {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        byte[] chunk = new byte[64 * 1024];
+        for (int n; (n = in.read(chunk)) != -1; ) {
+            buf.write(chunk, 0, n);
+            if (buf.size() > limit) throw new IOException("File too large");
+        }
+        return buf.toByteArray();
     }
 
     static String readAll(InputStream in) throws IOException {

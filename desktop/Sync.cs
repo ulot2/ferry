@@ -15,6 +15,7 @@ sealed class Sync
     // Raised on a thread-pool thread.
     public event Action<LinkState>? StateChanged;
     public event Action<string, DateTime>? TextReceived;
+    public event Action<byte[], DateTime>? ImageReceived;
     public event Action<string>? PhonePaired;
     public event Action<string>? MessageSeen;   // message id, for catching up after a restart
 
@@ -82,6 +83,26 @@ sealed class Sync
         var tags = m.TryGetProperty("tags", out var t) ? t.EnumerateArray().Select(x => x.GetString()).ToArray() : Array.Empty<string?>();
         if (tags.Contains("laptop")) return id;   // our own message coming back
 
+        var at = m.TryGetProperty("time", out var tm) ? DateTimeOffset.FromUnixTimeSeconds(tm.GetInt64()).LocalDateTime : DateTime.Now;
+        if (tags.Contains("image"))
+        {
+            // An image is a sealed file. Fetch it only from ntfy.sh and only up to 16 MB.
+            if (!m.TryGetProperty("attachment", out var file)) return id;
+            string fileUrl = file.TryGetProperty("url", out var fu) ? fu.GetString() ?? "" : "";
+            long size = file.TryGetProperty("size", out var fs) ? fs.GetInt64() : 0;
+            if (!fileUrl.StartsWith(Server + "/") || size > 16L * 1024 * 1024) return id;
+            try
+            {
+                byte[]? image = Crypto.OpenImage(code, await Http.GetByteArrayAsync(fileUrl, stop));
+                if (image is not null) ImageReceived?.Invoke(image, at);
+            }
+            catch (HttpRequestException)
+            {
+                // Expired (ntfy.sh keeps files 3 hours) or a failed download: skip it, or the stream would replay it forever.
+            }
+            return id;
+        }
+
         string sealedText = m.TryGetProperty("message", out var msg) ? msg.GetString() ?? "" : "";
         if (m.TryGetProperty("attachment", out var att))
         {
@@ -95,11 +116,7 @@ sealed class Sync
         if (string.IsNullOrEmpty(text)) return id;   // not from our phone: ignore it
 
         if (tags.Contains("pair")) PhonePaired?.Invoke(text);   // the phone sends its model name when it pairs
-        else
-        {
-            var at = m.TryGetProperty("time", out var tm) ? DateTimeOffset.FromUnixTimeSeconds(tm.GetInt64()).LocalDateTime : DateTime.Now;
-            TextReceived?.Invoke(text, at);
-        }
+        else TextReceived?.Invoke(text, at);
         return id;
     }
 
@@ -115,6 +132,20 @@ sealed class Sync
         if (asFile) request.Headers.Add("Filename", "clipboard.txt");
         request.Headers.Add("Tags", "laptop");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var response = await Http.SendAsync(request, timeout.Token);
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>Encrypts and sends an image (PNG or JPEG bytes) to the phone as a file.</summary>
+    public static async Task SendImage(string code, byte[] image)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"{Server}/{Crypto.Topic(code)}")
+        {
+            Content = new ByteArrayContent(Crypto.SealImage(code, image)),
+        };
+        request.Headers.Add("Filename", "image.ferry");
+        request.Headers.Add("Tags", "laptop,image");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));   // a few MB on a slow connection
         using var response = await Http.SendAsync(request, timeout.Token);
         response.EnsureSuccessStatusCode();
     }
