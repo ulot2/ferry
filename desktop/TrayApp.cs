@@ -318,7 +318,8 @@ sealed class TrayApp : ApplicationContext
         if (path != "" && File.Exists(path)) System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
     }
 
-    /// <summary>Puts text on the clipboard without sending it to the phone.</summary>    public void CopyQuietly(string text)
+    /// <summary>Puts text on the clipboard without sending it to the phone.</summary>
+    public void CopyQuietly(string text)
     {
         last = text;
         Clipboard.SetDataObject(text, true, 5, 100);
