@@ -99,11 +99,11 @@ sealed class TrayApp : ApplicationContext
         _ => "Connecting",
     };
 
-    public Color LampColor => Settings.Paused ? Harbor.OnNavyMuted : State switch
+    public Color LampColor => Settings.Paused ? Chart.InkMuted : State switch
     {
-        LinkState.Connected => Harbor.LampOn,
-        LinkState.Offline => Harbor.LampOff,
-        _ => Harbor.OnNavyMuted,
+        LinkState.Connected => Chart.Steady,
+        LinkState.Offline => Chart.Adrift,
+        _ => Chart.InkMuted,
     };
 
     public bool Paused
@@ -191,7 +191,7 @@ sealed class TrayApp : ApplicationContext
         string tip = "Ferry · " + StatusLabel + (LastCrossing is { } c ? $"\nLast: {c.Direction}, {c.Time:t}" : "");
         tray.Text = tip.Length > 127 ? tip[..127] : tip;
         var old = tray.Icon;
-        tray.Icon = Harbor.AppIcon(SystemInformation.SmallIconSize.Width, LampColor);
+        tray.Icon = Chart.AppIcon(SystemInformation.SmallIconSize.Width, LampColor);
         old?.Dispose();
         window?.Render();
     }
