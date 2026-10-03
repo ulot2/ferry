@@ -29,11 +29,11 @@ Lamps follow ship navigation lights: green = connected, red = offline, on-harbor
 System faces only: Roboto on Android (sp units, Material type roles), Segoe UI on Windows.
 - Wordmark: "FERRY", medium weight, 14sp, letter-spacing 0.24em, signal yellow on harbor. The only tracked uppercase text besides the ticket's "LAST CROSSING" kicker.
 - Route line ("Laptop → Phone"): Title Large, 22sp, medium.
-- Stub time ("14:02"): 28sp, medium, tabular figures.
-- Body 16sp, secondary 14sp.
+- Stub time ("14:02"): 26sp, medium, tabular figures. Day under it: 11sp, tracked.
+- Header line 15sp (on-harbor muted). Card titles 16sp medium. Body and preview 14sp, line height 1.25.
 
 ## Signature: the crossing ticket
-A surface card with 16dp corners, split by a dashed perforation with two semicircle notches cut from top and bottom edges. Right of the perforation is the stub, filled signal yellow, holding the time. Left side: kicker, route line, two-line preview of the text. The ticket overlaps the bottom of the navy header by 40dp. Empty state keeps the ticket shape with a dash in the stub.
+A surface card with 16dp corners, split by a dashed perforation with two semicircle notches cut from top and bottom edges. Right of the perforation is the stub, filled signal yellow, holding the time. Left side: kicker, route line, two-line preview of the text. The ticket overlaps the bottom of the navy header by 48dp. In the dark theme it gets a 1dp outline edge, because surface and harbor are close in tone. Empty state keeps the ticket shape with a dash in the stub.
 
 ## Components
 - Primary button: signal fill, on-signal text, pill shape, 56dp tall, full width. One per screen.
@@ -45,7 +45,7 @@ A surface card with 16dp corners, split by a dashed perforation with two semicir
 
 ## Layout
 - Android: edge-to-edge; navy header runs under the status bar. 24dp side margins, 16dp between cards, 32dp above section titles.
-- Windows: fixed 380 × 640 px (at 100% scaling) window, same stack: header, ticket, then pairing or paired section.
+- Windows: fixed 380 px wide window (at 100% scaling), 628 px tall while pairing and 480 px when paired. Same stack: header, ticket, then pairing or paired section. The title bar is painted harbor navy on Windows 11 so it joins the header. The QR code always sits on a white plate with navy modules, in both themes.
 
 ## Motion
 One moment: when a new crossing lands, the ticket slides up 8dp and fades in (200ms, decelerate). Respect the system "remove animations" setting with an instant swap.

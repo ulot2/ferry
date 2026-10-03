@@ -145,8 +145,10 @@ sealed class PillButton : Button
             if (kind == PillKind.Secondary) using (var pen = new Pen(Harbor.Outline, s)) g.DrawPath(pen, pill);
         }
         if (!Enabled) text = Harbor.InkMuted;
-        TextRenderer.DrawText(g, Text, Font, ClientRectangle, text,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+        // Quiet buttons read as text links, so their label sits left, in line with the text above.
+        var bounds = kind == PillKind.Quiet ? Rectangle.FromLTRB((int)(12 * s), 0, Width, Height) : ClientRectangle;
+        var align = kind == PillKind.Quiet ? TextFormatFlags.Left : TextFormatFlags.HorizontalCenter;
+        TextRenderer.DrawText(g, Text, Font, bounds, text, align | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
 
         if (Focused && ShowFocusCues)
         {

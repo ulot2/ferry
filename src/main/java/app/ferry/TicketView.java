@@ -16,6 +16,7 @@ public class TicketView extends LinearLayout {
     private final Paint surface = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint signal = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint holes = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint edge = new Paint(Paint.ANTI_ALIAS_FLAG);   // dark theme only: the ticket is close in tone to the navy header
     private final Path shape = new Path();
     private final Path notches = new Path();
     private final float d = getResources().getDisplayMetrics().density;
@@ -26,6 +27,9 @@ public class TicketView extends LinearLayout {
         surface.setColor(c.getColor(R.color.surface));
         signal.setColor(c.getColor(R.color.signal));
         holes.setColor(c.getColor(R.color.ground));
+        edge.setColor(c.getColor(R.color.card_stroke));
+        edge.setStyle(Paint.Style.STROKE);
+        edge.setStrokeWidth(d);
         holes.setStyle(Paint.Style.STROKE);
         holes.setStrokeWidth(2 * d);
         holes.setPathEffect(new DashPathEffect(new float[]{4 * d, 5 * d}, 0));
@@ -49,6 +53,7 @@ public class TicketView extends LinearLayout {
         canvas.clipPath(shape);
         canvas.drawRect(x, 0, w, h, signal);
         canvas.restore();
+        canvas.drawPath(shape, edge);
         canvas.drawLine(x, notch + 4 * d, x, h - notch - 4 * d, holes);
     }
 }

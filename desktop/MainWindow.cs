@@ -48,8 +48,8 @@ sealed class MainWindow : Form
         body = AddLabel(24, 264, 332, 40, Harbor.InkMuted, Harbor.Ground, Font);
 
         // Pairing view (the QR plate itself is painted).
-        codeLabel = AddLabel(24, 540, 220, 18, Harbor.InkMuted, Harbor.Ground, small);
-        codeLabel.Text = "Can't scan? Type this code on the phone:";
+        codeLabel = AddLabel(24, 540, 240, 18, Harbor.InkMuted, Harbor.Ground, small);
+        codeLabel.Text = "Can't scan? Type this code in Ferry:";
         code = new TextBox
         {
             Bounds = new Rectangle(24, 560, 236, 22),
@@ -73,7 +73,7 @@ sealed class MainWindow : Form
         showCode = AddButton("Show pairing code", PillKind.Secondary, 24, 392, 168, 40);
         showCode.Click += (_, _) => { pairingShown = true; Render(); };
 
-        reset = AddButton("Reset pairing", PillKind.Quiet, 16, 590, 124, 32);
+        reset = AddButton("Reset pairing", PillKind.Quiet, 12, 590, 124, 32);   // quiet text starts 12 px in, so it lines up at 24
         reset.Click += (_, _) => ConfirmReset();
 
         ResumeLayout(false);
@@ -218,6 +218,8 @@ sealed class MainWindow : Form
             g.SetClip(path, CombineMode.Intersect);
             using (var signal = new SolidBrush(Harbor.Signal)) g.FillRectangle(signal, stubX, r.Top, r.Right - stubX, r.Height);
             g.Restore(saved);
+            // Dark mode: the ticket and the navy header are close in tone, so give the ticket an edge.
+            if (Harbor.Dark) using (var edge = new Pen(Harbor.Outline, s)) g.DrawPath(edge, path);
         }
         // Perforation: notches show what is behind the ticket (navy above, ground below), then a dashed tear line.
         using (var navy = new SolidBrush(Harbor.Navy)) g.FillEllipse(navy, stubX - notch, r.Top - notch, 2 * notch, 2 * notch);
