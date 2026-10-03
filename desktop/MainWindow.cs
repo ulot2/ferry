@@ -304,7 +304,7 @@ sealed class MainWindow : Form
         string routeText = c?.Direction ?? (paired ? "No crossings yet" : "Not paired yet");
         string previewText = c is null
             ? (paired ? "Copy something here, or tap Send on your phone." : "Pair your phone to start.")
-            : $"“{c.Preview}”";
+            : $"“{TrayApp.Preview(c.Text)}”";
         float left = r.Left + 20 * s, textWidth = stubX - left - 16 * s;
 
         TextRenderer.DrawText(g, "LAST CROSSING", kicker, new Point((int)left, (int)(r.Top + 18 * s)), Harbor.InkMuted);
