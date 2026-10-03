@@ -280,7 +280,7 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             autoTitle.setText(auto ? "Automatic sending is on" : "Send copies automatically");
             autoBody.setText(auto
                     ? "Every copy on this phone goes to " + laptop + " by itself. Turn it off in Android's accessibility settings."
-                    : "Skip the Send button. Ferry uses Android's accessibility permission to notice taps on Copy. It does not read the screen.\n\n"
+                    : "Skip the Send button. Ferry uses Android's accessibility permission to notice taps on Copy. It reads only the label of what you tap, not the rest of the screen.\n\n"
                     + "If the switch is greyed out, open App info, tap the ⋮ menu, then Allow restricted settings.");
             autoToggle.setText(auto ? "Turn off" : "Turn on");
             autoAppInfo.setVisibility(auto ? View.GONE : View.VISIBLE);

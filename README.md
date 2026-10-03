@@ -28,7 +28,7 @@ Download both files from the latest release on the [Releases page](../../release
 1. Download `Ferry.exe` and put it in a permanent folder, for example `%LOCALAPPDATA%\Programs\Ferry`.
 2. Open `Ferry.exe`. If Windows shows "Windows protected your PC", click **More info**, then **Run anyway**. Windows shows this message because Ferry is not signed with a paid certificate.
 
-Ferry opens a window with a QR code. It also adds an icon to the system tray (the icons near the clock) and starts with Windows. You do not need to install anything else.
+Ferry opens a window with a QR code. It also adds an icon to the system tray (the icons near the clock), adds **Ferry** to the Start menu, and starts with Windows. You do not need to install anything else.
 
 ### On the phone
 
@@ -88,7 +88,7 @@ If a device is offline for a short time, it gets the missed copies when it conne
 
 ## Ferry Auto (automatic sending)
 
-Android does not let apps read the clipboard in the background. To send copies by itself, Ferry Auto uses Android's accessibility permission. With this permission, Ferry notices when you tap a **Copy** button. Then it reads the clipboard and sends the text. Ferry does not read the screen.
+Android does not let apps read the clipboard in the background. To send copies by itself, Ferry Auto uses Android's accessibility permission. With this permission, Ferry notices when you copy: a tap on a **Copy** button, or a "Copied" message. Then it reads the clipboard and sends the text. When you tap something, Ferry reads only the label of what you tapped, to find Copy buttons. It does not read the rest of the screen, and it never logs what you copy.
 
 Google Play Protect blocks apps with this permission when you install them from a phone browser. It does not block installs from a computer. For this reason, Ferry Auto is a separate edition that you install from a Windows computer.
 
@@ -117,7 +117,7 @@ If the switch is greyed out, Android blocks it because the app did not come from
 2. Tap the ⋮ menu in the top-right corner, then tap **Allow restricted settings**.
 3. Go back to the accessibility settings and turn on Ferry.
 
-Automatic sending works for Copy buttons that show the word "Copy" in the language of the phone. If an app uses a Copy button without a label, use **Send clipboard**.
+Automatic sending works for Copy buttons with a label such as "Copy" or "Copy link" (in the language of the phone or in English). If an app uses a Copy icon without any label, use **Send clipboard**.
 
 ## Updates
 
@@ -144,6 +144,8 @@ Your pairing and history stay after an update.
 - The QR scanner needs Google Play services. On a phone without them, type the code.
 
 ## Troubleshooting
+
+**I cannot find the Ferry icon on the laptop.** Windows 11 can hide new tray icons. Click the **^** arrow next to the clock. If Ferry is not there, it is not running: open **Ferry** from the Start menu. (**Quit Ferry** closes it completely.)
 
 **The light is red.** Make sure that the device is online. Ferry connects again by itself.
 

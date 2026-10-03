@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only click events, and no access to screen content. See AutoSendService. -->
+<!-- Taps, "Copied" toasts and announcements, and window changes. flagIncludeNotImportantViews: many apps' Copy buttons are not marked important, and their taps were dropped. Window content is read only inside a tapped element, to find its label. See AutoSendService. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeViewClicked"
+    android:accessibilityEventTypes="typeViewClicked|typeNotificationStateChanged|typeWindowStateChanged|typeAnnouncement"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:canRetrieveWindowContent="false"
+    android:accessibilityFlags="flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
     android:description="@string/auto_send_description"
     android:notificationTimeout="100" />
