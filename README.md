@@ -161,7 +161,7 @@ Your pairing and history stay after an update.
 
 GitHub Actions builds both apps (see `.github/workflows/build.yml`):
 
-- A push to `main` or `dev` makes a pre-release build. The apps do not offer it as an update.
+- A push to `main` or `dev` only builds the apps, to check that the code still compiles. It does not make a release. To test a build, download its files from the run page, or run `gh run download` with the run number.
 - A pushed tag such as `v1.2.0` makes a real release. The apps offer it as an update.
 
 To make a release, run these commands on `main`:
