@@ -9,6 +9,8 @@
     <AssemblyName>Ferry</AssemblyName>
     <RootNamespace>Ferry</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- The file's own icon: Windows uses it in the taskbar, Start menu and notification pop-ups. -->
+    <ApplicationIcon>ferry.ico</ApplicationIcon>
     <!-- One Ferry.exe that runs on any 64-bit Windows 10/11 PC, with no .NET install needed. -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>

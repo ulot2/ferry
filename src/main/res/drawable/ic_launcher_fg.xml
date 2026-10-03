@@ -7,12 +7,6 @@
         android:strokeColor="@color/icon_course"
         android:strokeWidth="3.5"
         android:strokeLineCap="round" />
-    <path
-        android:pathData="M51,44 L57,48 L51,52"
-        android:strokeColor="@color/icon_course"
-        android:strokeWidth="3.5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
     <path android:fillColor="@color/icon_ink" android:pathData="M33,64 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
     <path android:fillColor="@color/icon_ink" android:pathData="M75,64 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
 </vector>
