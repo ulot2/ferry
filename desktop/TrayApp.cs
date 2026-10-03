@@ -19,10 +19,12 @@ sealed class TrayApp : ApplicationContext
     readonly ToolStripMenuItem updateItem = new() { Visible = false };
     readonly ToolStripMenuItem pauseItem = new("Pause syncing") { CheckOnClick = true };
     readonly ToolStripMenuItem popupsItem = new("Show pop-ups") { CheckOnClick = true };
+    readonly ToolStripMenuItem imagesItem = new("Send and receive images") { CheckOnClick = true };
     readonly ToolStripMenuItem autostartItem = new("Start with Windows") { CheckOnClick = true };
     readonly System.Windows.Forms.Timer updateTimer = new() { Interval = 12 * 60 * 60 * 1000 };
     MainWindow? window;
     string? last;   // text we last sent or applied, so our own clipboard changes do not echo back
+    string? lastImage;   // hash of the image we last sent, so one copy is not sent twice
     (string Version, string Url)? update;
     Action balloonClick = () => { };
 
@@ -52,6 +54,8 @@ sealed class TrayApp : ApplicationContext
         pauseItem.CheckedChanged += (_, _) => Paused = pauseItem.Checked;
         popupsItem.Checked = Settings.Popups;
         popupsItem.CheckedChanged += (_, _) => Popups = popupsItem.Checked;
+        imagesItem.Checked = Settings.Images;
+        imagesItem.CheckedChanged += (_, _) => Images = imagesItem.Checked;
         autostartItem.Checked = StartWithWindows;
         autostartItem.CheckedChanged += (_, _) => StartWithWindows = autostartItem.Checked;
         updateItem.Click += (_, _) => InstallUpdate();
@@ -63,6 +67,7 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(pauseItem);
         menu.Items.Add(popupsItem);
+        menu.Items.Add(imagesItem);
         menu.Items.Add(autostartItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit Ferry", null, (_, _) => Quit());
@@ -72,6 +77,7 @@ sealed class TrayApp : ApplicationContext
 
         sync.StateChanged += s => ui.Post(_ => { State = s; Changed(); }, null);
         sync.TextReceived += (t, at) => ui.Post(_ => Apply(t, at), null);
+        sync.ImageReceived += (image, at) => ui.Post(_ => ApplyImage(image, at), null);
         sync.PhonePaired += name => ui.Post(_ => Paired(name), null);
         sync.MessageSeen += id => ui.Post(_ => { Settings.LastId = id; Settings.Save(); }, null);
         watcher.ClipboardChanged += OnClipboardChanged;
@@ -126,8 +132,20 @@ sealed class TrayApp : ApplicationContext
         }
     }
 
-    public bool StartWithWindows
+    public bool Images
     {
+        get => Settings.Images;
+        set
+        {
+            if (Settings.Images == value) return;
+            Settings.Images = value;
+            Settings.Save();
+            imagesItem.Checked = value;
+            Changed();
+        }
+    }
+
+    public bool StartWithWindows    {
         get => Registry.CurrentUser.OpenSubKey(RunKey)?.GetValue("Ferry") is string;
         set
         {
@@ -188,17 +206,25 @@ sealed class TrayApp : ApplicationContext
     {
         if (Settings.Paused) return;
         string text;
+        byte[]? image = null;
         try
         {
             // Password managers mark their copies with these formats. Never send those.
-            if (!Clipboard.ContainsText()
-                || Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing")
-                || Clipboard.ContainsData("Clipboard Viewer Ignore")) return;
-            text = Clipboard.GetText();
+            if (Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing")
+                || Clipboard.ContainsData("Clipboard Viewer Ignore")
+                || Clipboard.ContainsData(ImageClip.Marker)) return;   // the marker: an image Ferry itself put there
+            if (Clipboard.ContainsText()) text = Clipboard.GetText();   // text wins when an app copies both
+            else if (Settings.Images && Clipboard.ContainsImage()) (text, image) = ("", ImageClip.FromClipboard());
+            else return;
         }
         catch (ExternalException)
         {
             return;   // another app is holding the clipboard
+        }
+        if (image is not null)
+        {
+            await SendImage(image);
+            return;
         }
         if (text.Length == 0 || text == last) return;
 
@@ -231,6 +257,65 @@ sealed class TrayApp : ApplicationContext
             return;
         }
         if (Settings.Popups) Popup("Copied from " + (Settings.Peer == "" ? "your phone" : Settings.Peer), Preview(text), ToolTipIcon.None, ShowWindow);
+    }
+
+    async Task SendImage(byte[] image)
+    {
+        string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(image));
+        if (hash == lastImage) return;   // some apps announce one copy several times
+        lastImage = hash;
+        byte[]? small = await Task.Run(() => ImageClip.Shrink(image));
+        if (small is null)
+        {
+            Popup("Image not sent", "It is over 10 MB, even after Ferry made it smaller.", ToolTipIcon.Warning, ShowWindow);
+            return;
+        }
+        try
+        {
+            await Sync.SendImage(Settings.Code, small);
+            Crossed("Laptop → Phone", "Image", DateTime.Now, "");
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            lastImage = null;
+            Popup("Image not sent", "Ferry could not reach ntfy.sh. Copy the image again when you are online.", ToolTipIcon.Warning, ShowWindow);
+        }
+    }
+
+    void ApplyImage(byte[] image, DateTime at)
+    {
+        if (!Settings.Images) return;
+        string path;
+        try
+        {
+            path = ImageClip.Save(image);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            path = "";
+        }
+        Crossed("Phone → Laptop", "Image", at, path);
+        if (Settings.Paused || DateTime.Now - at > TimeSpan.FromMinutes(10)) return;   // late arrivals go to history only, as with text
+        try
+        {
+            ImageClip.ToClipboard(image);
+        }
+        catch (Exception e) when (e is ExternalException or ArgumentException)
+        {
+            return;   // clipboard busy, or not a picture Windows can read
+        }
+        if (Settings.Popups)
+            Popup("Image from " + (Settings.Peer == "" ? "your phone" : Settings.Peer),
+                path == "" ? "In your clipboard. Press Ctrl+V to paste." : "In your clipboard and in Pictures\\Ferry. Click to open it.",
+                ToolTipIcon.None, () => Open(path));
+    }
+
+    /// <summary>Puts a saved image back on the clipboard without sending it to the phone.</summary>
+    public void CopyImageQuietly(string path) => ImageClip.ToClipboard(File.ReadAllBytes(path));
+
+    static void Open(string path)
+    {
+        if (path != "" && File.Exists(path)) System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
     }
 
     /// <summary>Puts text on the clipboard without sending it to the phone.</summary>
@@ -268,9 +353,9 @@ sealed class TrayApp : ApplicationContext
         Changed();
     }
 
-    void Crossed(string direction, string text, DateTime at)
+    void Crossed(string direction, string text, DateTime at, string? imagePath = null)
     {
-        if (text.Length <= HistoryMaxChars) Settings.History.Insert(0, new Crossing(direction, text, at));
+        if (text.Length <= HistoryMaxChars) Settings.History.Insert(0, new Crossing(direction, text, at, imagePath));
         if (Settings.History.Count > HistorySize) Settings.History.RemoveRange(HistorySize, Settings.History.Count - HistorySize);
         Settings.Save();
         Changed();

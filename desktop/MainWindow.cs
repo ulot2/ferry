@@ -21,7 +21,7 @@ sealed class MainWindow : Form
     readonly TextBox code;
     readonly ListBox history;
     readonly PillButton copy, done, showCode, reset, clear;
-    readonly CheckBox pause, popups, autostart;
+    readonly CheckBox pause, popups, autostart, images;
     List<Crossing> earlier = [];
     readonly Font kicker = new("Segoe UI Semibold", 7.5f), route = new("Segoe UI Semibold", 13f), small = new("Segoe UI", 9f),
         stubTime = new("Segoe UI Semibold", 17f), wordmark = new("Segoe UI Semibold", 10.5f), pill = new("Segoe UI Semibold", 8.25f);
@@ -98,7 +98,9 @@ sealed class MainWindow : Form
         popups.CheckedChanged += (_, _) => app.Popups = popups.Checked;
         autostart = AddCheck("Start with Windows", 212, 566, 150);
         autostart.CheckedChanged += (_, _) => app.StartWithWindows = autostart.Checked;
-        showCode = AddButton("Show pairing code", PillKind.Secondary, 24, 604, 168, 36);
+        images = AddCheck("Send and receive images", 24, 596, 332);
+        images.CheckedChanged += (_, _) => app.Images = images.Checked;
+        showCode = AddButton("Show pairing code", PillKind.Secondary, 24, 634, 168, 36);
         showCode.Click += (_, _) => { pairingShown = true; Render(); };
 
         reset = AddButton("Reset pairing", PillKind.Quiet, 12, 590, 124, 32);   // quiet text starts 12 px in, so it lines up at 24
@@ -132,8 +134,22 @@ sealed class MainWindow : Form
     void CopySelected()
     {
         if (history.SelectedIndex < 0 || history.SelectedIndex >= earlier.Count) return;
-        app.CopyQuietly(earlier[history.SelectedIndex].Text);
-        historyHint.Text = "Copied.";
+        var item = earlier[history.SelectedIndex];
+        try
+        {
+            if (item.ImagePath is null) app.CopyQuietly(item.Text);
+            else if (File.Exists(item.ImagePath)) app.CopyImageQuietly(item.ImagePath);
+            else
+            {
+                historyHint.Text = item.ImagePath == "" ? "That image was sent from this laptop." : "That image is no longer in Pictures\\Ferry.";
+                return;
+            }
+            historyHint.Text = "Copied.";
+        }
+        catch (Exception e) when (e is System.Runtime.InteropServices.ExternalException or IOException or ArgumentException)
+        {
+            historyHint.Text = "Not copied: another app is using the clipboard. Try again.";
+        }
     }
 
     void DrawHistoryItem(object? sender, DrawItemEventArgs e)
@@ -148,7 +164,8 @@ sealed class MainWindow : Form
         TextRenderer.DrawText(e.Graphics, $"{item.Direction}  ·  {when}", small,
             new Rectangle(b.X + (int)(12 * s), b.Y + (int)(5 * s), b.Width - (int)(24 * s), (int)(18 * s)), Harbor.InkMuted,
             TextFormatFlags.Left | TextFormatFlags.SingleLine);
-        TextRenderer.DrawText(e.Graphics, TrayApp.Preview(item.Text), Font,
+        string line = item.ImagePath is null ? TrayApp.Preview(item.Text) : item.ImagePath == "" ? "Image" : "Image  ·  " + Path.GetFileName(item.ImagePath);
+        TextRenderer.DrawText(e.Graphics, line, Font,
             new Rectangle(b.X + (int)(12 * s), b.Y + (int)(22 * s), b.Width - (int)(24 * s), (int)(20 * s)), Harbor.Ink,
             TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
         e.DrawFocusRectangle();
@@ -223,11 +240,12 @@ sealed class MainWindow : Form
 
         codeLabel.Visible = code.Visible = copy.Visible = pairing;
         done.Visible = pairing && paired;
-        foreach (Control c in new Control[] { historyTitle, historyHint, clear, history, pause, popups, autostart, showCode })
+        foreach (Control c in new Control[] { historyTitle, historyHint, clear, history, pause, popups, autostart, images, showCode })
             c.Visible = !pairing;
         code.Text = Crypto.Grouped(st.Code);
         pause.Checked = st.Paused;
         popups.Checked = st.Popups;
+        images.Checked = st.Images;
         autostart.Checked = app.StartWithWindows;
 
         // The ticket shows the newest crossing; the list holds the ones before it.
@@ -240,8 +258,8 @@ sealed class MainWindow : Form
         historyEmpty.Visible = !pairing && earlier.Count == 0;
         if (earlier.Count == 0 || historyHint.Text == "Copied.") historyHint.Text = "Double-click or press Enter to copy one again.";
 
-        ClientSize = new Size(S(380), S(pairing ? 628 : 656));
-        reset.Location = pairing ? new Point(S(12), S(590)) : new Point(S(200), S(606));
+        ClientSize = new Size(S(380), S(pairing ? 628 : 686));
+        reset.Location = pairing ? new Point(S(12), S(590)) : new Point(S(200), S(636));
         Invalidate();
     }
 
@@ -304,6 +322,7 @@ sealed class MainWindow : Form
         string routeText = c?.Direction ?? (paired ? "No crossings yet" : "Not paired yet");
         string previewText = c is null
             ? (paired ? "Copy something here, or tap Send on your phone." : "Pair your phone to start.")
+            : c.ImagePath is not null ? (c.ImagePath == "" ? "An image, now in the phone's clipboard." : "An image, now in your clipboard and Pictures\\Ferry.")
             : $"“{TrayApp.Preview(c.Text)}”";
         float left = r.Left + 20 * s, textWidth = stubX - left - 16 * s;
 
