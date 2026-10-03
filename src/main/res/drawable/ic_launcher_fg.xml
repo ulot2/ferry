@@ -1,9 +1,18 @@
-<!-- The tile icon, scaled 2x and centred in the 108dp adaptive-icon canvas. -->
+<!-- Two harbors and the course between them, inside the 66dp safe zone of the 108dp adaptive canvas. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <group android:scaleX="2" android:scaleY="2" android:translateX="30" android:translateY="30">
-        <path android:fillColor="#FFFFFFFF"
-            android:pathData="M6.99,11L3,15l3.99,4v-3H14v-2H6.99v-3zM21,9l-3.99,-4v3H10v2h7.01v3L21,9z" />
-    </group>
+    <path
+        android:pathData="M33,64 C42,42 66,42 75,64"
+        android:strokeColor="@color/icon_course"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M51,44 L57,48 L51,52"
+        android:strokeColor="@color/icon_course"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path android:fillColor="@color/icon_ink" android:pathData="M33,64 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+    <path android:fillColor="@color/icon_ink" android:pathData="M75,64 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
 </vector>

@@ -1,80 +1,93 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Harbor type roles and components. See DESIGN.md. -->
+<!-- Nautical chart type roles and components. See DESIGN.md. -->
 <resources>
     <!-- Empty base: "Ferry.X" names make Android look for a parent called "Ferry". -->
     <style name="Ferry" />
 
     <style name="Ferry.Wordmark">
-        <item name="android:textSize">14sp</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:letterSpacing">0.24</item>
-        <item name="android:textColor">@color/signal</item>
+        <item name="android:textSize">26sp</item>
+        <item name="android:fontFamily">@font/barlow_condensed_semibold</item>
+        <item name="android:letterSpacing">0.2</item>
+        <item name="android:textColor">@color/ink</item>
     </style>
 
     <style name="Ferry.Kicker">
-        <item name="android:textSize">11sp</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:letterSpacing">0.12</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">@font/barlow_medium</item>
+        <item name="android:letterSpacing">0.14</item>
+        <item name="android:textColor">@color/ink_muted</item>
+    </style>
+
+    <style name="Ferry.Crossing">
+        <item name="android:textSize">20sp</item>
+        <item name="android:fontFamily">@font/barlow_medium</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+        <item name="android:textColor">@color/ink</item>
+    </style>
+
+    <style name="Ferry.Label">
+        <item name="android:textSize">15sp</item>
+        <item name="android:fontFamily">@font/barlow_italic</item>
         <item name="android:textColor">@color/ink_muted</item>
     </style>
 
     <style name="Ferry.Title">
-        <item name="android:textSize">22sp</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:textColor">@color/ink</item>
-    </style>
-
-    <style name="Ferry.CardTitle">
-        <item name="android:textSize">16sp</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:fontFamily">@font/barlow_medium</item>
         <item name="android:textColor">@color/ink</item>
     </style>
 
     <style name="Ferry.Body">
-        <item name="android:textSize">14sp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:fontFamily">@font/barlow_regular</item>
         <item name="android:lineSpacingMultiplier">1.25</item>
         <item name="android:textColor">@color/ink_muted</item>
     </style>
 
-    <style name="Ferry.Card">
+    <style name="Ferry.Notice">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginStart">24dp</item>
-        <item name="android:layout_marginEnd">24dp</item>
         <item name="android:layout_marginTop">16dp</item>
-        <item name="android:background">@drawable/bg_card</item>
+        <item name="android:background">@drawable/bg_notice</item>
         <item name="android:orientation">vertical</item>
-        <item name="android:padding">20dp</item>
+        <item name="android:padding">16dp</item>
     </style>
 
     <style name="Ferry.Button">
-        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_height">44dp</item>
         <item name="android:minWidth">48dp</item>
-        <item name="android:paddingStart">20dp</item>
-        <item name="android:paddingEnd">20dp</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
         <item name="android:gravity">center</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:fontFamily">@font/barlow_medium</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:stateListAnimator">@null</item>
     </style>
 
     <style name="Ferry.Button.Primary">
-        <item name="android:layout_height">56dp</item>
-        <item name="android:textSize">16sp</item>
+        <item name="android:layout_height">52dp</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:fontFamily">@font/barlow_bold</item>
         <item name="android:background">@drawable/bg_primary</item>
-        <item name="android:textColor">@color/on_signal</item>
+        <item name="android:textColor">@color/on_act</item>
     </style>
 
     <style name="Ferry.Button.Secondary">
-        <item name="android:background">@drawable/bg_secondary</item>
+        <item name="android:background">@drawable/bg_chip_off</item>
         <item name="android:textColor">@color/ink</item>
     </style>
 
     <style name="Ferry.Button.Text">
         <item name="android:background">@drawable/bg_text_button</item>
-        <item name="android:textColor">@color/ink</item>
-        <item name="android:paddingStart">12dp</item>
-        <item name="android:paddingEnd">12dp</item>
+        <item name="android:textColor">@color/course</item>
+        <item name="android:paddingStart">10dp</item>
+        <item name="android:paddingEnd">10dp</item>
+    </style>
+
+    <style name="Ferry.Chip" parent="Ferry.Button">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:textSize">14sp</item>
     </style>
 </resources>

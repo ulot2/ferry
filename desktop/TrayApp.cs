@@ -99,11 +99,11 @@ sealed class TrayApp : ApplicationContext
         _ => "Connecting",
     };
 
-    public Color LampColor => Settings.Paused ? Harbor.OnNavyMuted : State switch
+    public Color LampColor => Settings.Paused ? Chart.InkMuted : State switch
     {
-        LinkState.Connected => Harbor.LampOn,
-        LinkState.Offline => Harbor.LampOff,
-        _ => Harbor.OnNavyMuted,
+        LinkState.Connected => Chart.Steady,
+        LinkState.Offline => Chart.Adrift,
+        _ => Chart.InkMuted,
     };
 
     public bool Paused
@@ -191,7 +191,7 @@ sealed class TrayApp : ApplicationContext
         string tip = "Ferry · " + StatusLabel + (LastCrossing is { } c ? $"\nLast: {c.Direction}, {c.Time:t}" : "");
         tray.Text = tip.Length > 127 ? tip[..127] : tip;
         var old = tray.Icon;
-        tray.Icon = Harbor.AppIcon(SystemInformation.SmallIconSize.Width, LampColor);
+        tray.Icon = Chart.AppIcon(SystemInformation.SmallIconSize.Width, LampColor);
         old?.Dispose();
         window?.Render();
     }
@@ -212,6 +212,7 @@ sealed class TrayApp : ApplicationContext
             // Password managers mark their copies with these formats. Never send those.
             if (Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing")
                 || Clipboard.ContainsData("Clipboard Viewer Ignore")
+                || OptedOut("CanUploadToCloudClipboard")   // apps set it to 0 for "never send this to other devices"
                 || Clipboard.ContainsData(ImageClip.Marker)) return;   // the marker: an image Ferry itself put there
             if (Clipboard.ContainsText()) text = Clipboard.GetText();   // text wins when an app copies both
             else if (Settings.Images && Clipboard.ContainsImage()) (text, image) = ("", ImageClip.FromClipboard());
@@ -241,6 +242,22 @@ sealed class TrayApp : ApplicationContext
         }
     }
 
+    /// <summary>The text as a web link, when the whole copy is one http(s) address; otherwise null.</summary>
+    public static Uri? Link(string text)
+    {
+        string s = text.Trim();
+        return s.Length < 2048 && !s.Any(char.IsWhiteSpace) && Uri.TryCreate(s, UriKind.Absolute, out var u)
+            && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp) ? u : null;
+    }
+
+    /// <summary>Opens a link in the default browser. Only http(s), checked by Link(), so a copy can never start a program.</summary>
+    static void OpenLink(Uri url) =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true });
+
+    /// <summary>True when the copying app set this Windows clipboard flag to 0 (a 4-byte number), meaning "do not share".</summary>
+    static bool OptedOut(string format) =>
+        Clipboard.GetData(format) is MemoryStream flag && flag.Length >= 4 && BitConverter.ToInt32(flag.ToArray(), 0) == 0;
+
     void Apply(string text, DateTime at)
     {
         Crossed("Phone → Laptop", text, at);
@@ -256,7 +273,11 @@ sealed class TrayApp : ApplicationContext
         {
             return;
         }
-        if (Settings.Popups) Popup("Copied from " + (Settings.Peer == "" ? "your phone" : Settings.Peer), Preview(text), ToolTipIcon.None, ShowWindow);
+string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
+        if (!Settings.Popups) return;
+        // A copied link gets a pop-up that opens it; anything else just says what arrived.
+        if (Link(text) is { } url) Popup("Link from " + from, url.AbsoluteUri + "\nClick to open it.", ToolTipIcon.None, () => OpenLink(url));
+        else Popup("Copied from " + from, Preview(text), ToolTipIcon.None, ShowWindow);
     }
 
     async Task SendImage(byte[] image)

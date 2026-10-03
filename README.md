@@ -75,6 +75,7 @@ When text arrives, the other device shows it:
 
 - On the phone, a notification without sound shows the text for 8 seconds.
 - On the laptop, a pop-up shows the text. To stop the pop-ups, clear **Pop-ups** in the window or **Show pop-ups** in the tray menu.
+- If the text is one web link, the notice offers to open it. On the phone, tap the notification or **Open link**. On the laptop, click the pop-up. Ferry never opens a link by itself, and it only opens web links (http and https).
 
 Both apps keep the last 10 crossings (transfers). The newest one is on the crossing ticket at the top. To copy an earlier one again, tap it on the phone, or double-click it on the laptop.
 
@@ -158,7 +159,8 @@ Your pairing and history stay after an update.
 - ntfy.sh can see when a message is sent, how large it is, and which device type sent it.
 - The pairing code is the only secret. A person who has the code can read your clipboard text and send text to it. Do not share the code or the QR code.
 - If the code leaks, click **Reset pairing** in the laptop window. Then scan the new code with the phone.
-- On the laptop, Ferry does not send copies from password managers that mark their copies as private.
+- On the laptop, Ferry does not send copies that apps mark as private or as "do not share to other devices" (password managers do this).
+- On the phone, Ferry Auto does not send copies that apps mark as sensitive (password managers do this on Android 13 and later). If you tap **Send clipboard** yourself, Ferry sends the copy, because you chose to.
 - The history stays on each device, in storage that only Ferry (phone) or your Windows user (laptop) can read. **Clear** removes it.
 
 ## Limits

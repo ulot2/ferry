@@ -6,26 +6,27 @@ using QRCoder;
 namespace Ferry;
 
 /*
-THESIS: The laptop side of the same terminal. Status and the last crossing first, then the one job this window exists for: pairing by QR.
-OWN-WORLD: Harbor. Navy title bar and header as one field, signal-yellow wordmark, ship-light status lamp, the perforated crossing ticket with a yellow stub, a white QR plate with navy modules.
-STORY: First run: scan the code, see "Phone paired". Later: glance at the ticket to trust the link, pause or reset when needed.
-FIRST VIEWPORT: Header with wordmark left and lamp pill right; the ticket overlaps its lower edge; below it the QR plate (unpaired) or paired details.
-FORM: Owner-pinned "Harbor" direction, single-column terminal stack, same as the phone.
+THESIS: The laptop side of the same sea chart: two harbors and the course between them, then the logbook. Pairing by QR is the one job this window has before a phone is paired.
+OWN-WORLD: Nautical chart. Day: blue shallows, buff land, ink-navy harbors; night: a soft charcoal chart with grey contours. Magenta is the course and the one action. Barlow, italic for places. Title bar painted in the water color.
+STORY: First run: scan the code, see "Phone paired". Later: glance at the chart and the last crossing, double-click a logbook entry to copy it again, flip a chip.
+FIRST VIEWPORT: Chart band (wordmark left, status pill right, harbors and course); under it the last crossing; then the logbook or the QR plate.
+FORM: Owner-chosen "Nautical chart" from the four-direction canvas, same as the phone, with a soft charcoal night mode.
 */
 
-/// <summary>The Ferry window: header, crossing ticket, and pairing or paired details. See DESIGN.md.</summary>
+/// <summary>The Ferry window: the chart band, the last crossing, and the logbook or the pairing code. See DESIGN.md.</summary>
 sealed class MainWindow : Form
 {
     readonly TrayApp app;
-    readonly Label headerLine, title, body, codeLabel, historyTitle, historyHint, historyEmpty;
     readonly TextBox code;
     readonly ListBox history;
-    readonly PillButton copy, done, showCode, reset, clear;
-    readonly CheckBox pause, popups, autostart, images;
+    readonly PillButton copy, done, showCode, reset, clear, pause, popups, images, autostart;
     List<Crossing> earlier = [];
-    readonly Font kicker = new("Segoe UI Semibold", 7.5f), route = new("Segoe UI Semibold", 13f), small = new("Segoe UI", 9f),
-        stubTime = new("Segoe UI Semibold", 17f), wordmark = new("Segoe UI Semibold", 10.5f), pill = new("Segoe UI Semibold", 8.25f);
+    readonly Font wordmark = Chart.Font("Barlow Condensed SemiBold", 15f), pillFont = Chart.Font("Barlow Medium", 9.5f),
+        kicker = Chart.Font("Barlow Medium", 8f), crossing = Chart.Font("Barlow Medium", 12.5f), body = Chart.Font("Barlow", 10f),
+        bold = Chart.Font("Barlow", 10f, FontStyle.Bold), italic = Chart.Font("Barlow", 10f, FontStyle.Italic),
+        title = Chart.Font("Barlow Medium", 13f), small = Chart.Font("Barlow", 9f);
     bool pairingShown;
+    string hint = "";
     List<BitArray>? qr;
     string? qrFor;
 
@@ -35,86 +36,67 @@ sealed class MainWindow : Form
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(380, 628);
+        ClientSize = new Size(420, 616);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Harbor.Ground;
-        Font = new Font("Segoe UI", 9.75f);
-        Icon = Harbor.AppIcon(32, null);
+        BackColor = Chart.Ground;
+        Font = body;
+        Icon = Chart.AppIcon(32, null);
         DoubleBuffered = true;
         KeyPreview = true;
 
-        headerLine = AddLabel(24, 58, 332, 40, Harbor.OnNavyMuted, Harbor.Navy, Font);
-        title = AddLabel(24, 236, 332, 26, Harbor.Ink, Harbor.Ground, new Font("Segoe UI Semibold", 12f));
-        body = AddLabel(24, 264, 332, 40, Harbor.InkMuted, Harbor.Ground, Font);
-
-        // Pairing view (the QR plate itself is painted).
-        codeLabel = AddLabel(24, 540, 240, 18, Harbor.InkMuted, Harbor.Ground, small);
-        codeLabel.Text = "Can't scan? Type this code in Ferry:";
+        // Pairing view. The QR plate and the texts are painted.
         code = new TextBox
         {
-            Bounds = new Rectangle(24, 560, 236, 22),
+            Bounds = new Rectangle(22, 482, 260, 22),
             ReadOnly = true,
             TabStop = false,   // otherwise it takes focus on open and shows as selected; Copy code is the keyboard path
             BorderStyle = BorderStyle.None,
-            BackColor = Harbor.Ground,
-            ForeColor = Harbor.Ink,
+            BackColor = Chart.Ground,
+            ForeColor = Chart.Ink,
             Font = new Font("Consolas", 10f),   // the code is data: a fixed-width face keeps look-alike letters apart
         };
         Controls.Add(code);
-        copy = AddButton("Copy code", PillKind.Secondary, 268, 550, 88, 36);
+        copy = AddButton("Copy code", PillKind.Chip, 290, 474, 108, 36);
         copy.Click += (_, _) => app.CopyQuietly(app.Settings.Code);
-        done = AddButton("Done", PillKind.Secondary, 268, 590, 88, 32);
+        done = AddButton("Done", PillKind.Link, 12, 518, 90, 32);
         done.Click += (_, _) => HidePairing();
 
-        // Paired view: earlier crossings, settings, pairing.
-        historyTitle = AddLabel(24, 314, 220, 22, Harbor.Ink, Harbor.Ground, new Font("Segoe UI Semibold", 9.75f));
-        historyTitle.Text = "Earlier crossings";
-        historyHint = AddLabel(24, 338, 332, 18, Harbor.InkMuted, Harbor.Ground, small);
-        historyHint.Text = "Double-click or press Enter to copy one again.";
-        clear = AddButton("Clear", PillKind.Quiet, 288, 309, 80, 28);
+        // Paired view: the logbook, the switches as chips, and pairing links.
+        clear = AddButton("Clear", PillKind.Link, 338, 240, 64, 28);
         clear.Click += (_, _) => app.ClearHistory();
         history = new ListBox
         {
-            Bounds = new Rectangle(24, 364, 332, 188),
+            Bounds = new Rectangle(22, 272, 376, 200),
             BorderStyle = BorderStyle.None,
-            BackColor = Harbor.Surface,
-            ForeColor = Harbor.Ink,
+            BackColor = Chart.Ground,
+            ForeColor = Chart.Ink,
             DrawMode = DrawMode.OwnerDrawFixed,
             IntegralHeight = false,
-            AccessibleName = "Earlier crossings",
+            AccessibleName = "Logbook",
         };
         history.DrawItem += DrawHistoryItem;
         history.DoubleClick += (_, _) => CopySelected();
         history.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) CopySelected(); };
         Controls.Add(history);
-        historyEmpty = AddLabel(40, 378, 300, 40, Harbor.InkMuted, Harbor.Surface, small);
-        historyEmpty.Text = "Earlier crossings show up here, newest first.";
 
-        pause = AddCheck("Pause", 24, 566, 80);
-        pause.CheckedChanged += (_, _) => app.Paused = pause.Checked;
-        popups = AddCheck("Pop-ups", 112, 566, 92);
-        popups.CheckedChanged += (_, _) => app.Popups = popups.Checked;
-        autostart = AddCheck("Start with Windows", 212, 566, 150);
-        autostart.CheckedChanged += (_, _) => app.StartWithWindows = autostart.Checked;
-        images = AddCheck("Send and receive images", 24, 596, 332);
-        images.CheckedChanged += (_, _) => app.Images = images.Checked;
-        showCode = AddButton("Show pairing code", PillKind.Secondary, 24, 634, 168, 36);
+        pause = AddButton("Pause", PillKind.Chip, 22, 486, 74, 36);
+        pause.Click += (_, _) => app.Paused = !app.Paused;
+        popups = AddButton("Pop-ups", PillKind.Chip, 104, 486, 86, 36);
+        popups.Click += (_, _) => app.Popups = !app.Popups;
+        images = AddButton("Images", PillKind.Chip, 198, 486, 82, 36);
+        images.Click += (_, _) => app.Images = !app.Images;
+        autostart = AddButton("Start with Windows", PillKind.Chip, 22, 530, 156, 36);
+        autostart.Click += (_, _) => { app.StartWithWindows = !app.StartWithWindows; Render(); };
+        showCode = AddButton("Show pairing code", PillKind.Link, 12, 574, 160, 32);
         showCode.Click += (_, _) => { pairingShown = true; Render(); };
 
-        reset = AddButton("Reset pairing", PillKind.Quiet, 12, 590, 124, 32);   // quiet text starts 12 px in, so it lines up at 24
+        reset = AddButton("Reset pairing", PillKind.Link, 296, 574, 112, 32);
         reset.Click += (_, _) => ConfirmReset();
 
         ResumeLayout(false);
         Render();
-    }
-
-    Label AddLabel(int x, int y, int w, int h, Color fore, Color back, Font font)
-    {
-        var label = new Label { Bounds = new Rectangle(x, y, w, h), ForeColor = fore, BackColor = back, Font = font };
-        Controls.Add(label);
-        return label;
     }
 
     PillButton AddButton(string text, PillKind kind, int x, int y, int w, int h)
@@ -122,13 +104,6 @@ sealed class MainWindow : Form
         var button = new PillButton(text, kind) { Bounds = new Rectangle(x, y, w, h) };
         Controls.Add(button);
         return button;
-    }
-
-    CheckBox AddCheck(string text, int x, int y, int w)
-    {
-        var box = new CheckBox { Text = text, Bounds = new Rectangle(x, y, w, 26), ForeColor = Harbor.Ink, BackColor = Harbor.Ground };
-        Controls.Add(box);
-        return box;
     }
 
     void CopySelected()
@@ -141,15 +116,17 @@ sealed class MainWindow : Form
             else if (File.Exists(item.ImagePath)) app.CopyImageQuietly(item.ImagePath);
             else
             {
-                historyHint.Text = item.ImagePath == "" ? "That image was sent from this laptop." : "That image is no longer in Pictures\\Ferry.";
+                hint = item.ImagePath == "" ? "That image was sent from this laptop." : "That image is no longer in Pictures\\Ferry.";
+                Invalidate();
                 return;
             }
-            historyHint.Text = "Copied.";
+            hint = "Copied.";
         }
         catch (Exception e) when (e is System.Runtime.InteropServices.ExternalException or IOException or ArgumentException)
         {
-            historyHint.Text = "Not copied: another app is using the clipboard. Try again.";
+            hint = "Not copied: another app is using the clipboard. Try again.";
         }
+        Invalidate();
     }
 
     void DrawHistoryItem(object? sender, DrawItemEventArgs e)
@@ -157,17 +134,20 @@ sealed class MainWindow : Form
         if (e.Index < 0 || e.Index >= earlier.Count) return;
         var item = earlier[e.Index];
         bool selected = (e.State & DrawItemState.Selected) != 0;
-        using (var back = new SolidBrush(selected ? Harbor.Hover : Harbor.Surface)) e.Graphics.FillRectangle(back, e.Bounds);
-        float s = DeviceDpi / 96f;
+        var g = e.Graphics;
         var b = e.Bounds;
-        string when = item.Time.Date == DateTime.Today ? item.Time.ToString("t") : item.Time.ToString("d MMM, t");
-        TextRenderer.DrawText(e.Graphics, $"{item.Direction}  ·  {when}", small,
-            new Rectangle(b.X + (int)(12 * s), b.Y + (int)(5 * s), b.Width - (int)(24 * s), (int)(18 * s)), Harbor.InkMuted,
-            TextFormatFlags.Left | TextFormatFlags.SingleLine);
+        float s = DeviceDpi / 96f;
+        using (var back = new SolidBrush(selected ? Chart.Hover : Chart.Ground)) g.FillRectangle(back, b);
+        using (var rule = new Pen(Chart.RuleRow, 1)) g.DrawLine(rule, b.Left, b.Bottom - 1, b.Right, b.Bottom - 1);
+
+        string when = item.Time.Date == DateTime.Today ? item.Time.ToString("t") : item.Time.ToString("d MMM");
+        bool toPhone = item.Direction.EndsWith("Phone");
         string line = item.ImagePath is null ? TrayApp.Preview(item.Text) : item.ImagePath == "" ? "Image" : "Image  ·  " + Path.GetFileName(item.ImagePath);
-        TextRenderer.DrawText(e.Graphics, line, Font,
-            new Rectangle(b.X + (int)(12 * s), b.Y + (int)(22 * s), b.Width - (int)(24 * s), (int)(20 * s)), Harbor.Ink,
-            TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+        var flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine;
+        TextRenderer.DrawText(g, when, bold, new Rectangle(b.X + (int)(4 * s), b.Y, (int)(66 * s), b.Height), Chart.Ink, flags);
+        TextRenderer.DrawText(g, toPhone ? "→" : "←", bold, new Rectangle(b.X + (int)(72 * s), b.Y, (int)(24 * s), b.Height), Chart.Course, flags);
+        TextRenderer.DrawText(g, line, body, new Rectangle(b.X + (int)(98 * s), b.Y, b.Width - (int)(102 * s), b.Height), Chart.Ink,
+            flags | TextFormatFlags.EndEllipsis);
         e.DrawFocusRectangle();
     }
 
@@ -176,7 +156,7 @@ sealed class MainWindow : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        Harbor.NavyTitleBar(Handle);
+        Chart.ChartTitleBar(Handle);
     }
 
     // DeviceDpi is only right once the window exists, so size the window again here and on monitor changes.
@@ -230,36 +210,31 @@ sealed class MainWindow : Form
         bool pairing = pairingShown || !paired;
 
         Text = "Ferry · " + app.StatusLabel;
-        headerLine.Text = paired
-            ? $"Copies on this laptop land on {st.Peer}. Copies from the phone land here. All encrypted."
-            : "Ferry moves your clipboard between this laptop and your phone.";
-        title.Text = pairing ? (paired ? "Pair a phone again" : "Pair your phone") : $"Paired with {st.Peer}";
-        body.Text = pairing
-            ? "Open Ferry on your phone and tap Scan QR code. Then point the phone at this code."
-            : "Copies cross to your phone by themselves. On the phone, tap Send, or turn on automatic sending.";
+        var c = app.LastCrossing;
+        AccessibleDescription = c is null ? "No crossings yet." : $"Last crossing {c.Direction} at {c.Time:t}: {TrayApp.Preview(c.Text)}";
 
-        codeLabel.Visible = code.Visible = copy.Visible = pairing;
+        code.Visible = copy.Visible = pairing;
         done.Visible = pairing && paired;
-        foreach (Control c in new Control[] { historyTitle, historyHint, clear, history, pause, popups, autostart, images, showCode })
-            c.Visible = !pairing;
+        foreach (Control ctl in new Control[] { clear, history, pause, popups, images, autostart, showCode })
+            ctl.Visible = !pairing;
         code.Text = Crypto.Grouped(st.Code);
-        pause.Checked = st.Paused;
-        popups.Checked = st.Popups;
-        images.Checked = st.Images;
-        autostart.Checked = app.StartWithWindows;
+        pause.On = st.Paused;
+        popups.On = st.Popups;
+        images.On = st.Images;
+        autostart.On = app.StartWithWindows;
 
-        // The ticket shows the newest crossing; the list holds the ones before it.
+        // The text under the chart shows the newest crossing; the logbook holds the ones before it.
         earlier = st.History.Skip(1).ToList();
-        history.ItemHeight = S(46);
+        history.ItemHeight = S(40);
         history.BeginUpdate();
         history.Items.Clear();
         foreach (var item in earlier) history.Items.Add(item.Direction + ": " + TrayApp.Preview(item.Text));   // text for screen readers
         history.EndUpdate();
-        historyEmpty.Visible = !pairing && earlier.Count == 0;
-        if (earlier.Count == 0 || historyHint.Text == "Copied.") historyHint.Text = "Double-click or press Enter to copy one again.";
+        history.Visible = !pairing && earlier.Count > 0;   // empty: the painted hint under the rule shows instead
+        if (hint == "Copied.") hint = "";
 
-        ClientSize = new Size(S(380), S(pairing ? 628 : 686));
-        reset.Location = pairing ? new Point(S(12), S(590)) : new Point(S(200), S(636));
+        ClientSize = new Size(S(420), S(pairing ? 560 : 616));
+        reset.Location = pairing ? new Point(S(296), S(518)) : new Point(S(296), S(574));
         Invalidate();
     }
 
@@ -269,80 +244,56 @@ sealed class MainWindow : Form
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
         float s = DeviceDpi / 96f;
+        var st = app.Settings;
+        var c = app.LastCrossing;
+        bool pairing = code.Visible;
 
-        using (var navy = new SolidBrush(Harbor.Navy)) g.FillRectangle(navy, 0, 0, ClientSize.Width, 150 * s);
-        Harbor.DrawWordmark(g, wordmark, 24 * s, 22 * s, 3.5f * s);
+        // The chart band.
+        string phone = st.Peer == "" ? "Your phone" : st.Peer;
+        bool toPhone = c is null || c.Direction.EndsWith("Phone");
+        Chart.DrawChart(g, new RectangleF(0, 0, ClientSize.Width, 150 * s), s, "This laptop", phone, c is null ? "" : $"course {c.Time:t}", toPhone);
+        Chart.DrawTracked(g, "FERRY", wordmark, Chart.Ink, 18 * s, 12 * s, 3.5f * s);
         DrawStatusPill(g, s);
-        if (history.Visible)
+
+        float x = 22 * s, w = ClientSize.Width - 44 * s;
+        if (pairing)
         {
-            // A surface card around the history list, like the phone's history card.
-            using var card = Harbor.RoundRect(new RectangleF(16 * s, 358 * s, 348 * s, 200 * s), 12 * s);
-            using (var surface = new SolidBrush(Harbor.Surface)) g.FillPath(surface, card);
-            if (Harbor.Dark) using (var edge = new Pen(Harbor.Outline, s)) g.DrawPath(edge, card);
+            TextRenderer.DrawText(g, st.Peer != "" ? "Pair a phone again" : "Pair your phone", title, new Point((int)x, (int)(164 * s)), Chart.Ink);
+            TextRenderer.DrawText(g, "Open Ferry on your phone and tap Scan QR code. Then point the phone at this code.", body,
+                new Rectangle((int)x, (int)(192 * s), (int)w, (int)(40 * s)), Chart.InkMuted, TextFormatFlags.WordBreak);
+            TextRenderer.DrawText(g, "Can't scan? Type this code in Ferry:", small, new Point((int)x, (int)(462 * s)), Chart.InkMuted);
+            DrawQr(g, s);
+            return;
         }
-        DrawTicket(g, s);
-        if (code.Visible) DrawQr(g, s);
+
+        // The last crossing.
+        string kick = c is null ? (st.Peer == "" ? "NOT PAIRED YET" : "NO CROSSINGS YET")
+            : "LAST CROSSING · " + (toPhone ? "LAPTOP TO PHONE" : "PHONE TO LAPTOP") + (c.Time.Date == DateTime.Today ? "" : " · " + c.Time.ToString("d MMM").ToUpperInvariant());
+        Chart.DrawTracked(g, kick, kicker, Chart.InkMuted, x, 166 * s, 1.2f * s);
+        string text = c is null ? "Copy something here, or tap Send on your phone."
+            : c.ImagePath is not null ? (c.ImagePath == "" ? "An image, now in the phone's clipboard." : "An image, now in your clipboard and Pictures\\Ferry.")
+            : $"“{TrayApp.Preview(c.Text)}”";
+        TextRenderer.DrawText(g, text, crossing, new Rectangle((int)x, (int)(186 * s), (int)w, (int)(46 * s)), Chart.Ink,
+            TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
+
+        // The logbook header and rule; the list itself is the ListBox.
+        TextRenderer.DrawText(g, hint == "" ? "Logbook · double-click to copy again" : hint, hint == "" ? italic : body,
+            new Point((int)x, (int)(246 * s)), hint == "" ? Chart.InkMuted : Chart.Course);
+        using (var rule = new Pen(Chart.Rule, s)) g.DrawLine(rule, x, 270 * s, x + w, 270 * s);
+        if (earlier.Count == 0)
+            TextRenderer.DrawText(g, "Crossings show up here, newest first.", italic, new Point((int)x, (int)(286 * s)), Chart.InkMuted);
     }
 
     void DrawStatusPill(Graphics g, float s)
     {
-        string label = app.StatusLabel;
-        var size = TextRenderer.MeasureText(g, label, pill);
-        float h = 26 * s, w = size.Width + 34 * s, x = ClientSize.Width - 24 * s - w, y = 18 * s;
-        using (var path = Harbor.RoundRect(new RectangleF(x, y, w, h), h / 2))
-        using (var fill = new SolidBrush(Color.FromArgb(31, 255, 255, 255))) g.FillPath(fill, path);
+        string label = app.StatusLabel switch { "Connected" => "Steady link", "Offline" => "Adrift", var other => other };
+        var size = TextRenderer.MeasureText(g, label, pillFont);
+        float h = 26 * s, w = size.Width + 34 * s, x = ClientSize.Width - 18 * s - w, y = 14 * s;
+        using (var path = Chart.RoundRect(new RectangleF(x, y, w, h), h / 2))
+        using (var fill = new SolidBrush(Chart.Pill)) g.FillPath(fill, path);
         using (var lamp = new SolidBrush(app.LampColor)) g.FillEllipse(lamp, x + 12 * s, y + h / 2 - 4 * s, 8 * s, 8 * s);
-        TextRenderer.DrawText(g, label, pill, new Rectangle((int)(x + 26 * s), (int)y, size.Width + 4, (int)h), Harbor.OnNavy,
+        TextRenderer.DrawText(g, label, pillFont, new Rectangle((int)(x + 26 * s), (int)y, size.Width + 4, (int)h), Chart.Ink,
             TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine);
-    }
-
-    void DrawTicket(Graphics g, float s)
-    {
-        var r = new RectangleF(24 * s, 104 * s, 332 * s, 112 * s);
-        float stubX = r.Right - 92 * s, notch = 10 * s;
-
-        using (var path = Harbor.RoundRect(r, 16 * s))
-        {
-            using (var surface = new SolidBrush(Harbor.Surface)) g.FillPath(surface, path);
-            var saved = g.Save();
-            g.SetClip(path, CombineMode.Intersect);
-            using (var signal = new SolidBrush(Harbor.Signal)) g.FillRectangle(signal, stubX, r.Top, r.Right - stubX, r.Height);
-            g.Restore(saved);
-            // Dark mode: the ticket and the navy header are close in tone, so give the ticket an edge.
-            if (Harbor.Dark) using (var edge = new Pen(Harbor.Outline, s)) g.DrawPath(edge, path);
-        }
-        // Perforation: notches show what is behind the ticket (navy above, ground below), then a dashed tear line.
-        using (var navy = new SolidBrush(Harbor.Navy)) g.FillEllipse(navy, stubX - notch, r.Top - notch, 2 * notch, 2 * notch);
-        using (var ground = new SolidBrush(Harbor.Ground)) g.FillEllipse(ground, stubX - notch, r.Bottom - notch, 2 * notch, 2 * notch);
-        using (var tear = new Pen(Harbor.Ground, 2 * s) { DashPattern = [2f, 2.5f] })
-            g.DrawLine(tear, stubX, r.Top + notch + 4 * s, stubX, r.Bottom - notch - 4 * s);
-
-        bool paired = app.Settings.Peer != "";
-        var c = app.LastCrossing;
-        string routeText = c?.Direction ?? (paired ? "No crossings yet" : "Not paired yet");
-        string previewText = c is null
-            ? (paired ? "Copy something here, or tap Send on your phone." : "Pair your phone to start.")
-            : c.ImagePath is not null ? (c.ImagePath == "" ? "An image, now in the phone's clipboard." : "An image, now in your clipboard and Pictures\\Ferry.")
-            : $"“{TrayApp.Preview(c.Text)}”";
-        float left = r.Left + 20 * s, textWidth = stubX - left - 16 * s;
-
-        TextRenderer.DrawText(g, "LAST CROSSING", kicker, new Point((int)left, (int)(r.Top + 18 * s)), Harbor.InkMuted);
-        TextRenderer.DrawText(g, routeText, route, new Rectangle((int)left, (int)(r.Top + 34 * s), (int)textWidth, (int)(28 * s)), Harbor.Ink,
-            TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
-        TextRenderer.DrawText(g, previewText, small, new Rectangle((int)left, (int)(r.Top + 64 * s), (int)textWidth, (int)(36 * s)), Harbor.InkMuted,
-            TextFormatFlags.Left | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
-
-        var stub = new Rectangle((int)stubX, (int)r.Top, (int)(r.Right - stubX), (int)r.Height);
-        // Big figures only ("5:36"); a 12-hour clock's AM/PM moves to the small line, so the time always fits the stub.
-        bool h12 = System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortTimePattern.Contains('t');
-        string time = c?.Time.ToString(h12 ? "h:mm" : "H:mm") ?? "—";
-        string day = c is null ? "" : (h12 ? c.Time.ToString("tt").ToUpperInvariant() + " · " : "")
-            + (c.Time.Date == DateTime.Today ? "TODAY" : c.Time.ToString("d MMM").ToUpperInvariant());
-        TextRenderer.DrawText(g, time, stubTime, new Rectangle(stub.X, stub.Y + (int)(30 * s), stub.Width, (int)(34 * s)), Harbor.OnSignal,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.SingleLine);
-        if (c is not null)
-            TextRenderer.DrawText(g, day, kicker,
-                new Rectangle(stub.X, stub.Y + (int)(66 * s), stub.Width, (int)(16 * s)), Harbor.OnSignal, TextFormatFlags.HorizontalCenter);
     }
 
     void DrawQr(Graphics g, float s)
@@ -355,17 +306,17 @@ sealed class MainWindow : Form
             qr = data.ModuleMatrix;   // includes the white quiet zone scanners need
             qrFor = link;
         }
-        // Always a white plate with navy modules, also in dark mode, so every phone camera reads it.
-        var plate = new RectangleF(80 * s, 312 * s, 220 * s, 220 * s);
-        using (var path = Harbor.RoundRect(plate, 12 * s))
+        // Always a white plate with near-black modules, also at night, so every phone camera reads it.
+        var plate = new RectangleF((ClientSize.Width - 210 * s) / 2, 240 * s, 210 * s, 210 * s);
+        using (var path = Chart.RoundRect(plate, 12 * s))
         using (var white = new SolidBrush(Color.White)) g.FillPath(white, path);
         int n = qr!.Count;
         float m = (float)Math.Floor(plate.Width / n), x0 = plate.X + (plate.Width - m * n) / 2, y0 = plate.Y + (plate.Height - m * n) / 2;
         g.SmoothingMode = SmoothingMode.None;   // crisp module edges
-        using var navy = new SolidBrush(Harbor.Navy);
+        using var ink = new SolidBrush(Color.FromArgb(15, 42, 68));
         for (int y = 0; y < n; y++)
             for (int x = 0; x < n; x++)
-                if (qr[y][x]) g.FillRectangle(navy, x0 + x * m, y0 + y * m, m, m);
+                if (qr[y][x]) g.FillRectangle(ink, x0 + x * m, y0 + y * m, m, m);
         g.SmoothingMode = SmoothingMode.AntiAlias;
     }
 }
