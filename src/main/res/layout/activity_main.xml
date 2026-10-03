@@ -18,28 +18,25 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- The chart. Its height and top padding grow by the status-bar inset in code. -->
+        <!-- The chart, edge to edge. Its height and the top margins of the wordmark and pill grow by the status-bar inset in code. -->
         <FrameLayout
             android:id="@+id/header"
             android:layout_width="match_parent"
-            android:layout_height="240dp"
-            android:paddingStart="20dp"
-            android:paddingTop="16dp"
-            android:paddingEnd="18dp">
+            android:layout_height="240dp">
 
             <app.ferry.ChartView
                 android:id="@+id/chart"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginStart="-20dp"
-                android:layout_marginTop="-16dp"
-                android:layout_marginEnd="-18dp" />
+                android:layout_height="match_parent" />
 
             <TextView
+                android:id="@+id/wordmark"
                 style="@style/Ferry.Wordmark"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|start"
+                android:layout_marginStart="20dp"
+                android:layout_marginTop="16dp"
                 android:text="FERRY" />
 
             <LinearLayout
@@ -47,6 +44,8 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
                 android:layout_gravity="top|end"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="18dp"
                 android:background="@drawable/bg_pill"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"

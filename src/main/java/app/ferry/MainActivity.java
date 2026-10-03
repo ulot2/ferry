@@ -46,7 +46,8 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
     private ViewGroup historyList, content;
     private ChartView chart;
     private EditText codeField;
-    private int headerTop, headerHeight;
+    private View wordmark, statusPill;
+    private int wordmarkTop, pillTop, headerHeight;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -91,7 +92,10 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         codeField = findViewById(R.id.topic);
 
         // Edge to edge: the chart runs under the status bar; the content clears the navigation bar.
-        headerTop = header.getPaddingTop();
+        wordmark = findViewById(R.id.wordmark);
+        statusPill = findViewById(R.id.statusPill);
+        wordmarkTop = ((ViewGroup.MarginLayoutParams) wordmark.getLayoutParams()).topMargin;
+        pillTop = ((ViewGroup.MarginLayoutParams) statusPill.getLayoutParams()).topMargin;
         headerHeight = header.getLayoutParams().height;
         findViewById(R.id.scroll).setOnApplyWindowInsetsListener(this::applyInsets);
 
@@ -155,11 +159,12 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
     @SuppressWarnings("deprecation")
     private WindowInsets applyInsets(View v, WindowInsets insets) {
         int top = insets.getSystemWindowInsetTop();
-        header.setPadding(header.getPaddingLeft(), headerTop + top, header.getPaddingRight(), header.getPaddingBottom());
         ViewGroup.LayoutParams lp = header.getLayoutParams();
         lp.height = headerHeight + top;
         header.setLayoutParams(lp);
-        ((ViewGroup.MarginLayoutParams) chart.getLayoutParams()).topMargin = -(headerTop + top);
+        // The chart fills the whole header, under the status bar; only the wordmark and pill move down.
+        ((ViewGroup.MarginLayoutParams) wordmark.getLayoutParams()).topMargin = wordmarkTop + top;
+        ((ViewGroup.MarginLayoutParams) statusPill.getLayoutParams()).topMargin = pillTop + top;
         v.setPadding(insets.getSystemWindowInsetLeft(), 0, insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
         return insets.consumeSystemWindowInsets();
     }
