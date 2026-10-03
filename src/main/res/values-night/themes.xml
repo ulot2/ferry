@@ -2,12 +2,14 @@
 <resources>
     <style name="Theme.Ferry" parent="@android:style/Theme.DeviceDefault.NoActionBar">
         <item name="android:windowBackground">@color/ground</item>
-        <item name="android:colorAccent">@color/signal</item>
-        <item name="android:colorControlActivated">@color/ink</item>
+        <item name="android:colorAccent">@color/course</item>
+        <item name="android:colorControlActivated">@color/course</item>
         <item name="android:textColorPrimary">@color/ink</item>
         <item name="android:textColorSecondary">@color/ink_muted</item>
+        <item name="android:fontFamily">@font/barlow_regular</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Night chart: black, so light icons. -->
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>

@@ -1,12 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Nautical chart, night: black. See DESIGN.md. -->
 <resources>
-    <color name="ground">#08121F</color>
-    <color name="surface">#13233A</color>
-    <color name="ink">#E6EDF5</color>
-    <color name="ink_muted">#9AAABD</color>
-    <color name="outline">#2A3D55</color>
-    <color name="card_stroke">#2A3D55</color>
-    <color name="starboard">#3DD68C</color>
-    <color name="port">#FF6B6F</color>
-    <color name="ripple">#24E6EDF5</color>
+    <color name="water">#0D0F11</color>
+    <color name="contour1">#262B30</color>
+    <color name="contour2">#1C2024</color>
+    <color name="land">#1A1916</color>
+    <color name="ground">#000000</color>
+    <color name="ink">#ECEFF1</color>
+    <color name="ink_muted">#9AA3AB</color>
+    <color name="course">#E05AA0</color>
+    <color name="act">#C2297A</color>
+    <color name="on_act">#FFFFFF</color>
+    <color name="rule">#2A2F34</color>
+    <color name="rule_row">#1A1D20</color>
+    <color name="chip_on">#ECEFF1</color>
+    <color name="chip_on_text">#000000</color>
+    <color name="chip_off">#3A4046</color>
+    <color name="pill">#000000</color>
+    <color name="steady">#4CC38A</color>
+    <color name="adrift">#F2B8B5</color>
+    <color name="ripple">#29ECEFF1</color>
 </resources>
