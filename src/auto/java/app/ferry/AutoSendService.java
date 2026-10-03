@@ -16,7 +16,7 @@ import java.util.Locale;
 
 /**
  * Opt-in automatic sending. Android blocks background clipboard reads, so this service watches for
- * signs of a copy: a tap on a "Copy" button, or a "Copied" message (toast) or clipboard pop-up that
+ * signs of a copy: a tap on a "Copy" button, or a "Copied" message (toast or screen-reader announcement) or clipboard pop-up that
  * apps and the system show afterwards. On a tap it reads only the labels inside the tapped element. Then it opens the invisible
  * SendActivity, which reads the clipboard with focus and sends it.
  */
@@ -36,13 +36,12 @@ public class AutoSendService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent e) {
         CharSequence app = e.getPackageName();
         if (app == null || getPackageName().contentEquals(app) || !Ferry.paired(this)) return;
-        count(app, e.getEventType());
         String why = copySignal(e);
         // Diagnostics for "adb logcat -s Ferry": the app and the kind of event, never the copied text.
         // Window changes are only logged when they match, so the log does not list every app you open.
         int type = e.getEventType();
         if (why != null || type == AccessibilityEvent.TYPE_VIEW_CLICKED || type == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED
-                || type == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
+                || type == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED || type == AccessibilityEvent.TYPE_ANNOUNCEMENT) {
             Log.d(TAG, "event " + AccessibilityEvent.eventTypeToString(e.getEventType()) + " in " + app
                     + " class=" + e.getClassName() + " -> " + (why == null ? "ignored" : why));
         }
@@ -63,19 +62,6 @@ public class AutoSendService extends AccessibilityService {
         }, 300);
     }
 
-    // ponytail: temporary diagnostics while finding out why copy taps do not arrive on Xiaomi; remove with typeAllMask.
-    private final java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
-    private long countsSince = SystemClock.uptimeMillis();
-
-    /** Logs, every 5 seconds, how many events of each type arrived from each app. Counts only, no content. */
-    private void count(CharSequence app, int type) {
-        counts.merge(app + " " + AccessibilityEvent.eventTypeToString(type), 1, Integer::sum);
-        if (SystemClock.uptimeMillis() - countsSince < 5000) return;
-        Log.d(TAG, "event counts: " + counts);
-        counts.clear();
-        countsSince = SystemClock.uptimeMillis();
-    }
-
     /** Returns why this event means "something was just copied", or null. */
     private String copySignal(AccessibilityEvent e) {
         List<CharSequence> labels = new ArrayList<>(e.getText());
@@ -87,6 +73,7 @@ public class AutoSendService extends AccessibilityService {
                 // no label. Look only inside the tapped element, a few levels deep; nothing else on screen.
                 AccessibilityNodeInfo tapped = e.getSource();
                 return tapped != null && hasCopyLabel(tapped, 3) ? "tap on Copy (label inside)" : null;
+            case AccessibilityEvent.TYPE_ANNOUNCEMENT:   // "Copied" read out for screen readers (TikTok's Copy link has no label, only this)
             case AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED:   // toasts such as "Copied" or "Copied to clipboard"
                 for (CharSequence l : labels) {
                     if (l.toString().toLowerCase(Locale.ROOT).contains("copied")) return "Copied message";
