@@ -15,7 +15,7 @@ The owner first: one person with a Windows laptop and an Android phone (Redmi No
 Ferry moves clipboard text between a laptop and a phone. It replaces Microsoft Phone Link's clipboard sync, which the owner found unreliable. Success: a copy on the laptop is in the phone clipboard within a second or two, and a phone copy reaches the laptop with one tap.
 
 ## Positioning
-No account and no server of its own. The two devices pair by scanning a QR code; the code holds a secret topic on the public ntfy.sh relay. Laptop-to-phone is fully automatic. Phone-to-laptop takes one tap because Android blocks background clipboard reads.
+No account and no server of its own. The two devices pair by scanning a QR code; the code is a 26-character secret that gives both the ntfy.sh topic and an AES-256-GCM key, so the public relay only carries encrypted text. Laptop-to-phone is fully automatic. Phone-to-laptop is automatic when the user opts in to the accessibility-based auto-send; otherwise it takes one tap, because Android blocks background clipboard reads.
 
 ## Operating Context
 - The desktop app sits in the Windows tray and starts with Windows. Its window opens for pairing and status.
@@ -25,9 +25,10 @@ No account and no server of its own. The two devices pair by scanning a QR code;
 ## Capabilities and Constraints
 - Text only. Images are skipped. Text over 4 KB travels as a text file.
 - Password-manager copies on Windows are never sent.
-- Laptop copies are not stored on ntfy.sh. Phone copies stay there up to 12 hours.
-- Anyone who learns the topic can read and send clipboard text, so the topic is treated as a secret and can be reset.
-- Phone scanning uses Google's code scanner (needs Google Play services). Manual topic entry is the fallback.
+- All text is end-to-end encrypted. ntfy.sh keeps encrypted copies up to 12 hours so devices catch up after a disconnection; copies older than 10 minutes go to history, not the clipboard.
+- Both apps keep the last 10 crossings and offer updates from GitHub releases (public repo ulot2/ferry).
+- Anyone who learns the pairing code can read and send clipboard text, so it is treated as a secret and can be reset.
+- Phone scanning uses Google's code scanner (needs Google Play services). Typing the 26-character pairing code is the fallback.
 - Builds run on GitHub Actions; the laptop has little free disk space.
 
 ## Brand Commitments

@@ -4,65 +4,85 @@ using Microsoft.Win32;
 
 namespace Ferry;
 
-record Crossing(string Direction, string Preview, DateTime Time);
-
-/// <summary>Lives in the tray. Owns the settings, the ntfy.sh link, the clipboard watcher and the window.</summary>
+/// <summary>Lives in the tray. Owns the settings, the ntfy.sh link, the clipboard watcher, updates and the window.</summary>
 sealed class TrayApp : ApplicationContext
 {
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const int HistorySize = 10, HistoryMaxChars = 100_000;
     readonly WindowsFormsSynchronizationContext ui = new();
     readonly Sync sync = new();
     readonly NotifyIcon tray = new();
     readonly ClipboardWatcher watcher = new();
+    readonly EventWaitHandle show;
+    readonly RegisteredWaitHandle showWait;
     readonly ToolStripMenuItem statusItem = new() { Enabled = false };
+    readonly ToolStripMenuItem updateItem = new() { Visible = false };
     readonly ToolStripMenuItem pauseItem = new("Pause syncing") { CheckOnClick = true };
+    readonly ToolStripMenuItem popupsItem = new("Show pop-ups") { CheckOnClick = true };
     readonly ToolStripMenuItem autostartItem = new("Start with Windows") { CheckOnClick = true };
+    readonly System.Windows.Forms.Timer updateTimer = new() { Interval = 12 * 60 * 60 * 1000 };
     MainWindow? window;
     string? last;   // text we last sent or applied, so our own clipboard changes do not echo back
+    (string Version, string Url)? update;
+    Action balloonClick = () => { };
 
     public Settings Settings { get; }
     public LinkState State { get; private set; } = LinkState.Connecting;
-    public Crossing? LastCrossing { get; private set; }
+    public Crossing? LastCrossing => Settings.History.FirstOrDefault();
 
     public TrayApp(EventWaitHandle show)
     {
+        this.show = show;
         SynchronizationContext.SetSynchronizationContext(ui);
+        Updater.CleanUp();
         bool firstRun = !Settings.Exists;
         Settings = Settings.Load();
-        if (Settings.Topic == "")
+        if (Settings.Code == "")
         {
-            Settings.Topic = Settings.NewTopic();
+            // First run, or an update from before encryption: make a new pairing code. The phone pairs again.
+            Settings.Code = Crypto.NewCode();
+            Settings.Peer = "";
+            Settings.LastId = "";
             Settings.Save();
         }
         if (firstRun) StartWithWindows = true;
 
         pauseItem.Checked = Settings.Paused;
         pauseItem.CheckedChanged += (_, _) => Paused = pauseItem.Checked;
+        popupsItem.Checked = Settings.Popups;
+        popupsItem.CheckedChanged += (_, _) => Popups = popupsItem.Checked;
         autostartItem.Checked = StartWithWindows;
         autostartItem.CheckedChanged += (_, _) => StartWithWindows = autostartItem.Checked;
+        updateItem.Click += (_, _) => InstallUpdate();
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(statusItem);
         menu.Items.Add(new ToolStripMenuItem("Open Ferry", null, (_, _) => ShowWindow()) { Font = new Font(menu.Font, FontStyle.Bold) });
+        menu.Items.Add(updateItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(pauseItem);
+        menu.Items.Add(popupsItem);
         menu.Items.Add(autostartItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit Ferry", null, (_, _) => Quit());
         tray.ContextMenuStrip = menu;
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
-        tray.BalloonTipClicked += (_, _) => ShowWindow();
+        tray.BalloonTipClicked += (_, _) => balloonClick();
 
         sync.StateChanged += s => ui.Post(_ => { State = s; Changed(); }, null);
-        sync.TextReceived += t => ui.Post(_ => Apply(t), null);
+        sync.TextReceived += (t, at) => ui.Post(_ => Apply(t, at), null);
         sync.PhonePaired += name => ui.Post(_ => Paired(name), null);
+        sync.MessageSeen += id => ui.Post(_ => { Settings.LastId = id; Settings.Save(); }, null);
         watcher.ClipboardChanged += OnClipboardChanged;
-        ThreadPool.RegisterWaitForSingleObject(show, (_, _) => ui.Post(_ => ShowWindow(), null), null, -1, false);
+        showWait = ThreadPool.RegisterWaitForSingleObject(show, (_, _) => ui.Post(_ => ShowWindow(), null), null, -1, false);
+        updateTimer.Tick += async (_, _) => await CheckForUpdate();
+        updateTimer.Start();
 
         Changed();
         tray.Visible = true;
-        sync.Start(Settings.Topic);
+        sync.Start(Settings.Code, Settings.LastId);
         if (Settings.Peer == "") ShowWindow();   // not paired yet: show the QR code
+        _ = CheckForUpdate();
     }
 
     public string StatusLabel => Settings.Paused ? "Paused" : State switch
@@ -92,6 +112,19 @@ sealed class TrayApp : ApplicationContext
         }
     }
 
+    public bool Popups
+    {
+        get => Settings.Popups;
+        set
+        {
+            if (Settings.Popups == value) return;
+            Settings.Popups = value;
+            Settings.Save();
+            popupsItem.Checked = value;
+            Changed();
+        }
+    }
+
     public bool StartWithWindows
     {
         get => Registry.CurrentUser.OpenSubKey(RunKey)?.GetValue("Ferry") is string;
@@ -104,8 +137,13 @@ sealed class TrayApp : ApplicationContext
         }
     }
 
-    public string PairingLink =>
-        $"ferry://pair?topic={Settings.Topic}&name={Uri.EscapeDataString(Environment.MachineName)}";
+    public string PairingLink => $"ferry://pair?code={Settings.Code}&name={Uri.EscapeDataString(Environment.MachineName)}";
+
+    public static string Preview(string text)
+    {
+        string p = Regex.Replace(text.Trim(), @"\s+", " ");
+        return p.Length > 120 ? p[..120] + "…" : p;
+    }
 
     void Changed()
     {
@@ -116,6 +154,12 @@ sealed class TrayApp : ApplicationContext
         tray.Icon = Harbor.AppIcon(SystemInformation.SmallIconSize.Width, LampColor);
         old?.Dispose();
         window?.Render();
+    }
+
+    void Popup(string title, string text, ToolTipIcon icon, Action onClick)
+    {
+        balloonClick = onClick;
+        tray.ShowBalloonTip(5000, title, text, icon);
     }
 
     async void OnClipboardChanged()
@@ -139,19 +183,22 @@ sealed class TrayApp : ApplicationContext
         last = text;
         try
         {
-            await Sync.Send(Settings.Topic, text);
-            Crossed("Laptop → Phone", text);
+            await Sync.Send(Settings.Code, text);
+            Crossed("Laptop → Phone", text, DateTime.Now);
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
             last = null;
-            tray.ShowBalloonTip(4000, "Not sent", "Ferry could not reach ntfy.sh. Copy the text again when you are online.", ToolTipIcon.Warning);
+            Popup("Not sent", "Ferry could not reach ntfy.sh. Copy the text again when you are online.", ToolTipIcon.Warning, ShowWindow);
         }
     }
 
-    void Apply(string text)
+    void Apply(string text, DateTime at)
     {
-        if (Settings.Paused) return;
+        Crossed("Phone → Laptop", text, at);
+        // A copy that waited more than 10 minutes (laptop asleep or off) goes to history only.
+        // It must not replace what you copied since.
+        if (Settings.Paused || DateTime.Now - at > TimeSpan.FromMinutes(10)) return;
         last = text;
         try
         {
@@ -161,7 +208,7 @@ sealed class TrayApp : ApplicationContext
         {
             return;
         }
-        Crossed("Phone → Laptop", text);
+        if (Settings.Popups) Popup("Copied from " + (Settings.Peer == "" ? "your phone" : Settings.Peer), Preview(text), ToolTipIcon.None, ShowWindow);
     }
 
     /// <summary>Puts text on the clipboard without sending it to the phone.</summary>
@@ -177,26 +224,62 @@ sealed class TrayApp : ApplicationContext
         Settings.Peer = name.Length == 0 ? "your phone" : name[..Math.Min(name.Length, 40)];
         Settings.Save();
         window?.HidePairing();
-        tray.ShowBalloonTip(3000, "Phone paired", $"{Settings.Peer} is now linked to this laptop.", ToolTipIcon.Info);
+        Popup("Phone paired", $"{Settings.Peer} is now linked to this laptop. Your text is encrypted.", ToolTipIcon.Info, ShowWindow);
         Changed();
     }
 
     public void ResetPairing()
     {
-        Settings.Topic = Settings.NewTopic();
+        Settings.Code = Crypto.NewCode();
         Settings.Peer = "";
+        Settings.LastId = "";
+        Settings.History.Clear();
         Settings.Save();
-        LastCrossing = null;
-        sync.Start(Settings.Topic);
+        sync.Start(Settings.Code, "");
         Changed();
     }
 
-    void Crossed(string direction, string text)
+    public void ClearHistory()
     {
-        string preview = Regex.Replace(text.Trim(), @"\s+", " ");
-        if (preview.Length > 120) preview = preview[..120] + "…";
-        LastCrossing = new Crossing(direction, preview, DateTime.Now);
+        Settings.History.Clear();
+        Settings.Save();
         Changed();
+    }
+
+    void Crossed(string direction, string text, DateTime at)
+    {
+        if (text.Length <= HistoryMaxChars) Settings.History.Insert(0, new Crossing(direction, text, at));
+        if (Settings.History.Count > HistorySize) Settings.History.RemoveRange(HistorySize, Settings.History.Count - HistorySize);
+        Settings.Save();
+        Changed();
+    }
+
+    async Task CheckForUpdate()
+    {
+        var found = await Updater.Check();
+        if (found is null || found == update) return;
+        update = found;
+        updateItem.Text = $"Update to Ferry {found.Value.Version}";
+        updateItem.Visible = true;
+        Popup($"Ferry {found.Value.Version} is ready", "Click to update. Ferry restarts by itself; your pairing stays.", ToolTipIcon.Info, InstallUpdate);
+    }
+
+    async void InstallUpdate()
+    {
+        if (update is not { } u) return;
+        updateItem.Enabled = false;
+        updateItem.Text = "Downloading update…";
+        try
+        {
+            await Updater.Install(u.Url, () => { showWait.Unregister(null); show.Dispose(); });
+            Quit();
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException)
+        {
+            updateItem.Enabled = true;
+            updateItem.Text = $"Update to Ferry {u.Version}";
+            Popup("Update failed", "Ferry could not download or install the update. It keeps working; try again later from the tray menu.", ToolTipIcon.Warning, () => { });
+        }
     }
 
     void ShowWindow()
@@ -210,6 +293,7 @@ sealed class TrayApp : ApplicationContext
     void Quit()
     {
         tray.Visible = false;
+        updateTimer.Stop();
         sync.Stop();
         watcher.Dispose();
         window?.Dispose();

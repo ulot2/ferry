@@ -1,14 +1,18 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace Ferry;
 
-/// <summary>Saved in %APPDATA%\Ferry\settings.json.</summary>
+record Crossing(string Direction, string Text, DateTime Time);
+
+/// <summary>Saved in %APPDATA%\Ferry\settings.json (only this Windows user can read it).</summary>
 sealed class Settings
 {
-    public string Topic { get; set; } = "";
+    public string Code { get; set; } = "";   // pairing secret; versions before encryption saved "Topic" instead
     public string Peer { get; set; } = "";   // model of the paired phone; empty = not paired yet
     public bool Paused { get; set; }
+    public bool Popups { get; set; } = true;
+    public string LastId { get; set; } = "";   // last ntfy.sh message seen, so a restart catches up on what it missed
+    public List<Crossing> History { get; set; } = [];   // newest first
 
     static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Ferry");
     static readonly string FilePath = Path.Combine(Dir, "settings.json");
@@ -32,7 +36,4 @@ sealed class Settings
         Directory.CreateDirectory(Dir);
         File.WriteAllText(FilePath, JsonSerializer.Serialize(this));
     }
-
-    /// <summary>A secret ntfy.sh topic. Anyone who knows it can read the clipboard, so it is long and random.</summary>
-    public static string NewTopic() => "ferry-" + RandomNumberGenerator.GetString("abcdefghijkmnpqrstuvwxyz23456789", 24);
 }

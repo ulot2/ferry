@@ -8,6 +8,6 @@ import android.content.Intent;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent intent) {
-        if (!Ferry.topic(c).isEmpty()) SyncService.start(c);
+        if (Ferry.paired(c)) SyncService.start(c);
     }
 }
