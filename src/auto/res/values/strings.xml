@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="auto_send_label">Ferry automatic sending</string>
-    <string name="auto_send_description">Ferry sends the text you copy on this phone to your paired laptop, so you do not have to tap Send. Ferry only notices taps on Copy buttons. It does not read the screen. The text is encrypted before it leaves the phone.</string>
+    <string name="auto_send_description">Ferry sends the text you copy on this phone to your paired laptop, so you do not have to tap Send. When you tap something, Ferry reads only the label of what you tapped, to find Copy buttons. It does not read the rest of the screen. The text is encrypted before it leaves the phone.</string>
 </resources>

@@ -8,6 +8,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +17,7 @@ import java.util.Locale;
 /**
  * Opt-in automatic sending. Android blocks background clipboard reads, so this service watches for
  * signs of a copy: a tap on a "Copy" button, or a "Copied" message (toast) or clipboard pop-up that
- * apps and the system show afterwards. It reads no screen content. Then it opens the invisible
+ * apps and the system show afterwards. On a tap it reads only the labels inside the tapped element. Then it opens the invisible
  * SendActivity, which reads the clipboard with focus and sends it.
  */
 public class AutoSendService extends AccessibilityService {
@@ -65,12 +66,11 @@ public class AutoSendService extends AccessibilityService {
         if (e.getContentDescription() != null) labels.add(e.getContentDescription());
         switch (e.getEventType()) {
             case AccessibilityEvent.TYPE_VIEW_CLICKED:
-                for (CharSequence l : labels) {
-                    String s = l.toString().trim();
-                    if (s.equalsIgnoreCase(copyLabel) || s.equalsIgnoreCase("Copy") || s.equalsIgnoreCase("Copy text")
-                            || s.equalsIgnoreCase("Copy link")) return "tap on Copy";
-                }
-                return null;
+                for (CharSequence l : labels) if (isCopyLabel(l)) return "tap on Copy";
+                // Most apps put the word in a child view (an icon plus a text below it), so the tap itself carries
+                // no label. Look only inside the tapped element, a few levels deep; nothing else on screen.
+                AccessibilityNodeInfo tapped = e.getSource();
+                return tapped != null && hasCopyLabel(tapped, 3) ? "tap on Copy (label inside)" : null;
             case AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED:   // toasts such as "Copied" or "Copied to clipboard"
                 for (CharSequence l : labels) {
                     if (l.toString().toLowerCase(Locale.ROOT).contains("copied")) return "Copied message";
@@ -78,10 +78,31 @@ public class AutoSendService extends AccessibilityService {
                 return null;
             case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED:   // Android 13+ clipboard pop-up in the corner
                 CharSequence cls = e.getClassName();
-                return cls != null && cls.toString().toLowerCase(Locale.ROOT).contains("clipboard") ? "clipboard pop-up" : null;
+                if (cls != null && cls.toString().toLowerCase(Locale.ROOT).contains("clipboard")) return "clipboard pop-up";
+                // Diagnostics: name the system's own windows, to learn what this phone shows after a copy.
+                if ("com.android.systemui".contentEquals(e.getPackageName())) Log.d(TAG, "system window " + cls);
+                return null;
             default:
                 return null;
         }
+    }
+
+    /** "Copy", "Copy link", "Copy text", "Copy message"… in the phone's language or English. Not "Copyright". */
+    private boolean isCopyLabel(CharSequence label) {
+        if (label == null) return false;
+        String s = label.toString().trim().toLowerCase(Locale.ROOT);
+        String copy = copyLabel.toLowerCase(Locale.ROOT);
+        return s.equals(copy) || s.equals("copy") || ((s.startsWith(copy + " ") || s.startsWith("copy ")) && s.length() <= 24);
+    }
+
+    private boolean hasCopyLabel(AccessibilityNodeInfo node, int depth) {
+        if (isCopyLabel(node.getText()) || isCopyLabel(node.getContentDescription())) return true;
+        if (depth == 0) return false;
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null && hasCopyLabel(child, depth - 1)) return true;
+        }
+        return false;
     }
 
     @Override
