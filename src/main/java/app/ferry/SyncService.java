@@ -295,6 +295,7 @@ public class SyncService extends Service {
                 .setContentIntent(open)
                 .addAction(new Notification.Action.Builder(null, "Send clipboard", send).build())
                 .setOngoing(true)
+                .setOnlyAlertOnce(true)   // status updates change the text quietly; no pop-up on each reconnect
                 .build();
     }
 }
