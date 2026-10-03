@@ -29,7 +29,7 @@ Lamps follow ship navigation lights: green = connected, red = offline, on-harbor
 System faces only: Roboto on Android (sp units, Material type roles), Segoe UI on Windows.
 - Wordmark: "FERRY", medium weight, 14sp, letter-spacing 0.24em, signal yellow on harbor. The only tracked uppercase text besides the ticket's "LAST CROSSING" kicker.
 - Route line ("Laptop → Phone"): Title Large, 22sp, medium.
-- Stub time ("14:02"): 26sp, medium, tabular figures. Day under it: 11sp, tracked.
+- Stub time ("5:36"): 26sp, medium, tabular figures, digits only. Day under it: 11sp, tracked; on a 12-hour clock it starts with AM/PM ("PM · TODAY"), so the time always fits the stub.
 - Header line 15sp (on-harbor muted). Card titles 16sp medium. Body and preview 14sp, line height 1.25.
 
 ## Signature: the crossing ticket
@@ -41,7 +41,9 @@ A surface card with 16dp corners, split by a dashed perforation with two semicir
 - Text button: ink text, no fill, 48dp touch area.
 - Status pill (in header): lamp dot 8dp + label, translucent white fill (12% on navy).
 - Plain section cards on the ground: surface fill, 16dp corners, no border in light, 1dp outline in dark. Never nest cards.
-- Notices (battery, Xiaomi autostart): same section card, title + one sentence + action. No colored side borders.
+- Notices (update ready, automatic sending, battery, Xiaomi autostart): same section card, title + one or two sentences + action. No colored side borders. Shown only when they apply.
+- History (earlier crossings): a section card listing up to 9 rows under the ticket. Each row: muted meta line (direction · time, 12sp, tabular figures) over one ink line of preview text. Tap (phone) or double-click/Enter (laptop) copies it again. Not tracked uppercase.
+- Arrival notices: phone uses a silent heads-up notification that clears after 8 s; laptop uses a tray pop-up. Both show the sender and a one-line preview.
 
 ## Layout
 - Android: edge-to-edge; navy header runs under the status bar. 24dp side margins, 16dp between cards, 32dp above section titles.

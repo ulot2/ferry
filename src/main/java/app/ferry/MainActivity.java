@@ -229,9 +229,12 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             long at = last.optLong("at");
             route.setText(last.optString("dir"));
             preview.setText("“" + Ferry.preview(last.optString("text")) + "”");
-            stubTime.setText(DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date(at)));
-            stubDay.setText(DateUtils.isToday(at) ? "TODAY"
-                    : DateUtils.formatDateTime(this, at, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH).toUpperCase(Locale.getDefault()));
+            // Big figures only ("5:36"); a 12-hour clock's AM/PM moves to the small line, so the time always fits the stub.
+            boolean h24 = android.text.format.DateFormat.is24HourFormat(this);
+            stubTime.setText(android.text.format.DateFormat.format(h24 ? "H:mm" : "h:mm", at));
+            String day = DateUtils.isToday(at) ? "TODAY"
+                    : DateUtils.formatDateTime(this, at, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH).toUpperCase(Locale.getDefault());
+            stubDay.setText(h24 ? day : android.text.format.DateFormat.format("a", at).toString().toUpperCase(Locale.getDefault()) + " · " + day);
         }
         renderHistory(history);
 

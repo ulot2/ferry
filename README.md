@@ -2,17 +2,22 @@
 
 Ferry moves clipboard text between a Windows laptop and an Android phone.
 
-When you copy text on the laptop, the text goes into the clipboard of the phone within a second or two. When you copy text on the phone, one tap sends it to the laptop. You do not need an account. The two devices pair when the phone scans a QR code.
+When you copy text on the laptop, the text goes into the clipboard of the phone within a second or two. When you copy text on the phone, Ferry sends it to the laptop: with one tap, or by itself if you turn on automatic sending. You do not need an account. The two devices pair when the phone scans a QR code, and all text is encrypted end to end (only your two devices can read it).
 
 ## How it works
 
-The laptop and the phone do not connect to each other directly. Both connect to [ntfy.sh](https://ntfy.sh), a free public relay (a server that passes messages on). Pairing gives both devices the same secret topic (a private channel name on ntfy.sh). Each device sends clipboard text to that topic and receives the text from the other device.
+The laptop and the phone do not connect to each other directly. Both connect to [ntfy.sh](https://ntfy.sh), a free public relay (a server that passes messages on).
 
 ```
-Laptop (Ferry.exe)  ⇄  ntfy.sh, secret topic  ⇄  Phone (Ferry app)
+Laptop (Ferry.exe)  ⇄  ntfy.sh  ⇄  Phone (Ferry app)
 ```
 
-Laptop to phone is automatic. Phone to laptop takes one tap, because Android does not let apps read the clipboard in the background.
+The QR code holds a pairing code: 26 random letters and numbers. Both devices make two things from this code:
+
+- A topic: a private channel name on ntfy.sh.
+- An encryption key. The key never leaves your devices.
+
+Each device encrypts the text with the key (AES-256-GCM) before it sends the text to the topic. ntfy.sh only sees encrypted text. Each device ignores messages that were not encrypted with your key.
 
 ## Install
 
@@ -20,11 +25,10 @@ Download both files from the latest release on the [Releases page](../../release
 
 ### On the laptop
 
-1. Make sure that the [.NET Desktop Runtime 10](https://dotnet.microsoft.com/download/dotnet/10.0) is installed.
-2. Download `Ferry.exe` and put it in a permanent folder, for example `%LOCALAPPDATA%\Programs\Ferry`.
-3. Open `Ferry.exe`. If Windows shows "Windows protected your PC", click **More info**, then **Run anyway**.
+1. Download `Ferry.exe` and put it in a permanent folder, for example `%LOCALAPPDATA%\Programs\Ferry`.
+2. Open `Ferry.exe`. If Windows shows "Windows protected your PC", click **More info**, then **Run anyway**. Windows shows this message because Ferry is not signed with a paid certificate.
 
-Ferry opens a window with a QR code. It also adds an icon to the system tray (the icons near the clock) and starts with Windows.
+Ferry opens a window with a QR code. It also adds an icon to the system tray (the icons near the clock) and starts with Windows. You do not need to install anything else.
 
 ### On the phone
 
@@ -37,26 +41,33 @@ Ferry opens a window with a QR code. It also adds an icon to the system tray (th
 1. On the phone, tap **Scan QR code**.
 2. Point the camera at the QR code in the Ferry window on the laptop.
 
-The laptop shows "Phone paired". The two devices now share a secret topic.
+The laptop shows "Phone paired".
 
-If the scanner does not open, tap **Type the code** on the phone. Then type the code that is under the QR code on the laptop.
+If the scanner does not open, tap **Type the code** on the phone. Then type the code that is under the QR code on the laptop. Spaces do not matter.
 
 After pairing, do these steps on the phone:
 
 1. Tap **Allow background use**. Without it, Android cuts the connection when the phone sleeps.
 2. On a Xiaomi, Redmi or POCO phone, open **Settings > Apps > Ferry** and turn on **Autostart**.
-3. Optional: add the **Send clipboard** tile to the quick settings panel.
+3. Optional: turn on automatic sending (see the next section).
+4. Optional: add the **Send clipboard** tile to the quick settings panel.
 
 ## Use Ferry
 
 | To send | Do this |
 |---|---|
 | Laptop to phone | Copy text on the laptop. It goes into the phone clipboard. |
-| Phone to laptop | Copy text on the phone. Then tap **Send clipboard** in the Ferry notification or in the quick settings tile. |
+| Phone to laptop, automatic | Turn on automatic sending once. Then copy text on the phone as usual. |
+| Phone to laptop, by hand | Copy text on the phone. Then tap **Send clipboard** in the Ferry notification or in the quick settings tile. |
 | Selected text on the phone | Select the text and choose **Send to laptop** in the menu. |
 | Text from another phone app | Tap **Share** and choose **Send to laptop**. |
 
-Both apps show the last crossing (one transfer): its direction, its time, and the first words of the text.
+When text arrives, the other device shows it:
+
+- On the phone, a notification without sound shows the text for 8 seconds.
+- On the laptop, a pop-up shows the text. To stop the pop-ups, clear **Pop-ups** in the window or **Show pop-ups** in the tray menu.
+
+Both apps keep the last 10 crossings (transfers). The newest one is on the crossing ticket at the top. To copy an earlier one again, tap it on the phone, or double-click it on the laptop.
 
 The status light shows the connection:
 
@@ -64,22 +75,47 @@ The status light shows the connection:
 - Red: offline. Ferry tries again every 5 seconds.
 - Gray: connecting or paused. On the phone, gray also means "not paired".
 
-To stop syncing for a while on the laptop, right-click the tray icon and choose **Pause syncing**.
+If a device is offline for a short time, it gets the missed copies when it connects again. A copy that is more than 10 minutes old goes into the history only. It does not replace what is in your clipboard now.
+
+## Automatic sending on the phone
+
+Android does not let apps read the clipboard in the background. To send copies by itself, Ferry uses Android's accessibility permission. With this permission, Ferry notices when you tap a **Copy** button. Then it reads the clipboard and sends the text. Ferry does not read the screen.
+
+To turn it on:
+
+1. In Ferry, tap **Turn on** on the "Send copies automatically" card.
+2. In the accessibility settings, open **Ferry automatic sending** and turn it on.
+
+If the switch is greyed out, Android blocks it because you installed Ferry from a file. Do these steps:
+
+1. In Ferry, tap **App info**.
+2. Tap the ⋮ menu in the top-right corner, then tap **Allow restricted settings**.
+3. Go back to the accessibility settings and turn on Ferry.
+
+Automatic sending works for Copy buttons that show the word "Copy" in the language of the phone. If an app uses a Copy button without a label, use **Send clipboard**.
+
+## Updates
+
+Both apps look for a newer release on GitHub:
+
+- On the laptop, a pop-up shows when an update is ready. Click it, or choose **Update to Ferry x.y.z** in the tray menu. Ferry downloads the update and restarts by itself.
+- On the phone, an "update is ready" card shows. Tap **Download update**, then install the file over the current app.
+
+Your pairing and history stay after an update.
 
 ## Privacy and security
 
-- The topic is the only secret. A person who knows the topic can read your clipboard text and send text to it. Do not share the code under the QR code.
-- If the topic leaks, click **Reset pairing** in the laptop window. Then scan the new code with the phone.
-- Laptop copies pass through ntfy.sh, and ntfy.sh does not store them.
-- Phone copies stay on ntfy.sh for up to 12 hours. The laptop uses them to catch up after a short disconnection.
-- Ferry does not encrypt the text itself. ntfy.sh can read the text that passes through it.
+- Text is encrypted end to end. ntfy.sh stores encrypted copies for up to 12 hours, so a device that was offline can catch up. ntfy.sh cannot read them.
+- ntfy.sh can see when a message is sent, how large it is, and which device type sent it.
+- The pairing code is the only secret. A person who has the code can read your clipboard text and send text to it. Do not share the code or the QR code.
+- If the code leaks, click **Reset pairing** in the laptop window. Then scan the new code with the phone.
 - On the laptop, Ferry does not send copies from password managers that mark their copies as private.
+- The history stays on each device, in storage that only Ferry (phone) or your Windows user (laptop) can read. **Clear** removes it.
 
 ## Limits
 
 - Ferry moves text only. It skips images and files.
 - ntfy.sh limits one message to 4,096 bytes. Ferry sends longer text as a text file, and the other device reads the file.
-- Phone to laptop always takes one tap.
 - The QR scanner needs Google Play services. On a phone without them, type the code.
 
 ## Troubleshooting
@@ -88,13 +124,27 @@ To stop syncing for a while on the laptop, right-click the tray icon and choose 
 
 **Laptop copies stop arriving on the phone.** Open Ferry on the phone. If a "Keep the link open" card shows, tap **Allow background use**. On a Xiaomi phone, also turn on Autostart.
 
+**Automatic sending stopped.** Some phones turn off accessibility services to save power. Open Ferry and look at the "Send copies automatically" card. If it says **Turn on**, turn it on again.
+
+**The phone says "Pair again".** This version encrypts the text, so phones paired with an older version must pair again. Update Ferry on the laptop, then scan the new QR code.
+
 **The phone says "Not sent".** The phone could not reach ntfy.sh. Copy the text again when the phone is online.
 
-**Nothing arrives after you reset pairing.** Scan the new QR code with the phone.
+## Build and release
 
-## Build
+GitHub Actions builds both apps (see `.github/workflows/build.yml`):
 
-GitHub Actions builds both apps on every push to `main` or `dev` (see `.github/workflows/build.yml`). Each build publishes a pre-release with `Ferry.apk` and `Ferry.exe`.
+- A push to `main` or `dev` makes a pre-release build. The apps do not offer it as an update.
+- A pushed tag such as `v1.2.0` makes a real release. The apps offer it as an update.
+
+To make a release, run these commands on `main`:
+
+```bash
+git tag v1.2.0
+```
+```bash
+git push origin v1.2.0
+```
 
 The Android build signs the APK with a key from two repository secrets:
 
@@ -122,5 +172,6 @@ The Android build needs JDK 21, the Android SDK, and Gradle 8.14. Copy the key t
 |---|---|
 | `src/main/` | Android app (Java, Android framework views) |
 | `desktop/` | Windows tray app (C#, Windows Forms) |
+| `src/main/java/app/ferry/Crypto.java`, `desktop/Crypto.cs` | The encryption. Both files must stay identical in behavior. |
 | `PRODUCT.md` | Who Ferry is for and what it must do |
 | `DESIGN.md` | The Harbor design: colors, type, and the crossing ticket |

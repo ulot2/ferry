@@ -71,13 +71,13 @@ sealed class MainWindow : Form
         // Paired view: earlier crossings, settings, pairing.
         historyTitle = AddLabel(24, 314, 220, 22, Harbor.Ink, Harbor.Ground, new Font("Segoe UI Semibold", 9.75f));
         historyTitle.Text = "Earlier crossings";
-        historyHint = AddLabel(24, 334, 260, 18, Harbor.InkMuted, Harbor.Ground, small);
-        historyHint.Text = "Double-click one, or press Enter, to copy it again.";
-        clear = AddButton("Clear", PillKind.Quiet, 288, 312, 80, 28);
+        historyHint = AddLabel(24, 338, 332, 18, Harbor.InkMuted, Harbor.Ground, small);
+        historyHint.Text = "Double-click or press Enter to copy one again.";
+        clear = AddButton("Clear", PillKind.Quiet, 288, 309, 80, 28);
         clear.Click += (_, _) => app.ClearHistory();
         history = new ListBox
         {
-            Bounds = new Rectangle(24, 358, 332, 196),
+            Bounds = new Rectangle(24, 364, 332, 188),
             BorderStyle = BorderStyle.None,
             BackColor = Harbor.Surface,
             ForeColor = Harbor.Ink,
@@ -89,7 +89,7 @@ sealed class MainWindow : Form
         history.DoubleClick += (_, _) => CopySelected();
         history.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) CopySelected(); };
         Controls.Add(history);
-        historyEmpty = AddLabel(40, 374, 300, 40, Harbor.InkMuted, Harbor.Surface, small);
+        historyEmpty = AddLabel(40, 378, 300, 40, Harbor.InkMuted, Harbor.Surface, small);
         historyEmpty.Text = "Earlier crossings show up here, newest first.";
 
         pause = AddCheck("Pause", 24, 566, 80);
@@ -238,7 +238,7 @@ sealed class MainWindow : Form
         foreach (var item in earlier) history.Items.Add(item.Direction + ": " + TrayApp.Preview(item.Text));   // text for screen readers
         history.EndUpdate();
         historyEmpty.Visible = !pairing && earlier.Count == 0;
-        if (earlier.Count == 0 || historyHint.Text == "Copied.") historyHint.Text = "Double-click one, or press Enter, to copy it again.";
+        if (earlier.Count == 0 || historyHint.Text == "Copied.") historyHint.Text = "Double-click or press Enter to copy one again.";
 
         ClientSize = new Size(S(380), S(pairing ? 628 : 656));
         reset.Location = pairing ? new Point(S(12), S(590)) : new Point(S(200), S(606));
@@ -258,7 +258,7 @@ sealed class MainWindow : Form
         if (history.Visible)
         {
             // A surface card around the history list, like the phone's history card.
-            using var card = Harbor.RoundRect(new RectangleF(16 * s, 352 * s, 348 * s, 206 * s), 12 * s);
+            using var card = Harbor.RoundRect(new RectangleF(16 * s, 358 * s, 348 * s, 200 * s), 12 * s);
             using (var surface = new SolidBrush(Harbor.Surface)) g.FillPath(surface, card);
             if (Harbor.Dark) using (var edge = new Pen(Harbor.Outline, s)) g.DrawPath(edge, card);
         }
@@ -314,11 +314,15 @@ sealed class MainWindow : Form
             TextFormatFlags.Left | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
 
         var stub = new Rectangle((int)stubX, (int)r.Top, (int)(r.Right - stubX), (int)r.Height);
-        string time = c?.Time.ToString("t") ?? "—";
+        // Big figures only ("5:36"); a 12-hour clock's AM/PM moves to the small line, so the time always fits the stub.
+        bool h12 = System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortTimePattern.Contains('t');
+        string time = c?.Time.ToString(h12 ? "h:mm" : "H:mm") ?? "—";
+        string day = c is null ? "" : (h12 ? c.Time.ToString("tt").ToUpperInvariant() + " · " : "")
+            + (c.Time.Date == DateTime.Today ? "TODAY" : c.Time.ToString("d MMM").ToUpperInvariant());
         TextRenderer.DrawText(g, time, stubTime, new Rectangle(stub.X, stub.Y + (int)(30 * s), stub.Width, (int)(34 * s)), Harbor.OnSignal,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.SingleLine);
         if (c is not null)
-            TextRenderer.DrawText(g, c.Time.Date == DateTime.Today ? "TODAY" : c.Time.ToString("d MMM").ToUpperInvariant(), kicker,
+            TextRenderer.DrawText(g, day, kicker,
                 new Rectangle(stub.X, stub.Y + (int)(66 * s), stub.Width, (int)(16 * s)), Harbor.OnSignal, TextFormatFlags.HorizontalCenter);
     }
 
