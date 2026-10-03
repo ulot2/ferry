@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+THESIS: Ferry is a terminal, not a settings page. The screen answers "is the link up, what crossed last" before anything else; it refuses the stock form-of-fields layout.
+OWN-WORLD: Harbor. Deep-navy field under the status bar, signal-yellow lamp for the one action, a boarding-pass ticket with a perforated yellow stub. Ship-light lamps: green connected, red offline.
+STORY: The user glances, sees the last crossing and its time, trusts the link, and taps Send when they need phone-to-laptop.
+FIRST VIEWPORT: Navy header (wordmark left, lamp pill right, one line of context). The crossing ticket overlaps its bottom edge. The full-width yellow Send button sits directly under the ticket. Pairing and notices follow.
+FORM: Owner-pinned "Harbor" direction (chosen in the question round, no seed roll). Staging: single-column terminal stack.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="24dp">
+
+        <!-- Header: the harbor field. Top padding grows by the status bar inset in code. -->
+        <LinearLayout
+            android:id="@+id/header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/harbor"
+            android:orientation="vertical"
+            android:paddingStart="24dp"
+            android:paddingTop="20dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="68dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Ferry.Wordmark"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="FERRY" />
+
+                <LinearLayout
+                    android:id="@+id/statusPill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:background="@drawable/bg_pill"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="14dp">
+
+                    <View
+                        android:id="@+id/lamp"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/lamp" />
+
+                    <TextView
+                        android:id="@+id/statusText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/on_harbor"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/headerLine"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:lineSpacingMultiplier="1.2"
+                android:textColor="@color/on_harbor_muted"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <!-- The crossing ticket, overlapping the header. -->
+        <app.ferry.TicketView
+            android:id="@+id/ticket"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="-48dp"
+            android:layout_marginEnd="24dp"
+            android:minHeight="128dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    style="@style/Ferry.Kicker"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="LAST CROSSING" />
+
+                <TextView
+                    android:id="@+id/route"
+                    style="@style/Ferry.Title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp" />
+
+                <TextView
+                    android:id="@+id/preview"
+                    style="@style/Ferry.Body"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:ellipsize="end"
+                    android:maxLines="2" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/stub"
+                android:layout_width="96dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp">
+
+                <TextView
+                    android:id="@+id/stubTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="@color/on_signal"
+                    android:textSize="26sp" />
+
+                <TextView
+                    android:id="@+id/stubDay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.08"
+                    android:textColor="@color/on_signal"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </app.ferry.TicketView>
+
+        <Button
+            android:id="@+id/send"
+            style="@style/Ferry.Button.Primary"
+            android:layout_width="match_parent"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginEnd="24dp"
+            android:text="Send clipboard to laptop" />
+
+        <!-- Pairing -->
+        <LinearLayout
+            android:id="@+id/pairCard"
+            style="@style/Ferry.Card"
+            android:layout_marginTop="24dp">
+
+            <TextView
+                android:id="@+id/pairTitle"
+                style="@style/Ferry.CardTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:id="@+id/pairBody"
+                style="@style/Ferry.Body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp" />
+
+            <TextView
+                android:id="@+id/pairError"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="@color/port"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/manualRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <EditText
+                    android:id="@+id/topic"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_field"
+                    android:hint="Pairing code"
+                    android:importantForAutofill="no"
+                    android:inputType="textNoSuggestions|textVisiblePassword"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:singleLine="true"
+                    android:textColor="@color/ink"
+                    android:textColorHint="@color/ink_muted"
+                    android:textSize="15sp" />
+
+                <Button
+                    android:id="@+id/manualSave"
+                    style="@style/Ferry.Button.Secondary"
+                    android:layout_width="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Pair" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/scan"
+                    style="@style/Ferry.Button.Secondary"
+                    android:layout_width="wrap_content" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <Button
+                    android:id="@+id/pairAlt"
+                    style="@style/Ferry.Button.Text"
+                    android:layout_width="wrap_content" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Notices: shown only when they apply. -->
+        <LinearLayout
+            android:id="@+id/batteryCard"
+            style="@style/Ferry.Card"
+            android:visibility="gone">
+
+            <TextView
+                style="@style/Ferry.CardTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Keep the link open" />
+
+            <TextView
+                style="@style/Ferry.Body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Android cuts the connection when the phone sleeps, so laptop copies stop arriving. Allow Ferry to run in the background." />
+
+            <Button
+                android:id="@+id/battery"
+                style="@style/Ferry.Button.Secondary"
+                android:layout_width="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Allow background use" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/xiaomiCard"
+            style="@style/Ferry.Card"
+            android:visibility="gone">
+
+            <TextView
+                style="@style/Ferry.CardTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Turn on Autostart" />
+
+            <TextView
+                style="@style/Ferry.Body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Xiaomi phones stop apps that are not on the Autostart list. Open Settings &gt; Apps &gt; Ferry and turn on Autostart." />
+
+            <Button
+                android:id="@+id/appSettings"
+                style="@style/Ferry.Button.Secondary"
+                android:layout_width="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Open app settings" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

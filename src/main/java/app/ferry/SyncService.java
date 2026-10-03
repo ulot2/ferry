@@ -32,6 +32,7 @@ public class SyncService extends Service {
     private volatile boolean running;
     private volatile HttpURLConnection con;
     private Thread worker;
+    private volatile String label = "Connecting…";
 
     static void start(Context c) {
         c.startForegroundService(new Intent(c, SyncService.class));
@@ -41,8 +42,9 @@ public class SyncService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         getSystemService(NotificationManager.class).createNotificationChannel(
                 new NotificationChannel(CHANNEL, "Connection", NotificationManager.IMPORTANCE_MIN));
-        startForeground(1, status("Connecting…"));
+        startForeground(1, status(label));
         if (worker == null) {
+            Ferry.status(this, Ferry.STATUS_CONNECTING);
             running = true;
             worker = new Thread(this::loop, "ferry-sync");
             worker.start();
@@ -53,6 +55,7 @@ public class SyncService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        Ferry.status(this, Ferry.STATUS_OFFLINE);
         HttpURLConnection c = con;
         if (c != null) c.disconnect();   // unblocks the read in loop()
     }
@@ -70,17 +73,20 @@ public class SyncService extends Service {
                 con.setConnectTimeout(15_000);
                 con.setReadTimeout(90_000);   // ntfy.sh sends a keepalive every 45 s; silence means the link is dead
                 BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8));
-                show("Connected");
+                state(Ferry.STATUS_CONNECTED, "Connected");
                 for (String line; (line = in.readLine()) != null; ) {
                     JSONObject m = new JSONObject(line);
                     if (!"message".equals(m.optString("event")) || hasTag(m, "phone")) continue;
                     String text = m.has("attachment") ? fetchText(m.getJSONObject("attachment")) : m.optString("message");
-                    if (text != null && !text.isEmpty()) setClipboard(text);
+                    if (text != null && !text.isEmpty()) {
+                        setClipboard(text);
+                        Ferry.crossed(this, "Laptop → Phone", text);
+                    }
                 }
             } catch (Exception e) {
                 // ponytail: fixed 5 s retry; add backoff if it drains battery while offline
                 if (running) {
-                    show("Reconnecting…");
+                    state(Ferry.STATUS_OFFLINE, "Offline, retrying");
                     SystemClock.sleep(5_000);
                 }
             } finally {
@@ -112,8 +118,10 @@ public class SyncService extends Service {
         main.post(() -> getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("Ferry", text)));
     }
 
-    private void show(String text) {
-        getSystemService(NotificationManager.class).notify(1, status(text));
+    private void state(String status, String label) {
+        this.label = label;
+        Ferry.status(this, status);
+        getSystemService(NotificationManager.class).notify(1, status(label));
     }
 
     private Notification status(String text) {

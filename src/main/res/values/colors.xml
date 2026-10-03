@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Harbor palette. See DESIGN.md. Dark values live in values-night. -->
+<resources>
+    <color name="harbor">#0F2742</color>
+    <color name="on_harbor">#F4F7FB</color>
+    <color name="on_harbor_muted">#A9BAD0</color>
+    <color name="harbor_pill">#1FFFFFFF</color>
+    <color name="signal">#F2C230</color>
+    <color name="signal_pressed">#D9AC22</color>
+    <color name="on_signal">#0F2742</color>
+    <!-- Status lamp on the navy header, same in both themes: ship lights. -->
+    <color name="lamp_connected">#3DD68C</color>
+    <color name="lamp_offline">#FF6B6F</color>
+
+    <color name="ground">#E9EEF4</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="ink">#0F2742</color>
+    <color name="ink_muted">#4A5B70</color>
+    <color name="outline">#C9D3DE</color>
+    <color name="card_stroke">#00000000</color>
+    <color name="starboard">#1F9D61</color>
+    <color name="port">#C9353A</color>
+    <color name="ripple">#1F0F2742</color>
+</resources>

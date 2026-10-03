@@ -1,0 +1,5 @@
+<!-- Status lamp. MainActivity tints it starboard, port or muted. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#FFFFFFFF" />
+    <size android:width="8dp" android:height="8dp" />
+</shape>

@@ -48,10 +48,11 @@ public class SendActivity extends Activity {
         new Thread(() -> {
             String result;
             try {
-                Ferry.send(topic, text);
+                Ferry.send(topic, text, "phone");
+                Ferry.crossed(this, "Phone → Laptop", text);
                 result = "Sent to laptop";
             } catch (IOException e) {
-                result = "Not sent: " + e.getMessage();
+                result = "Not sent. Ferry could not reach ntfy.sh. Try again when you are online.";
             }
             String r = result;
             runOnUiThread(() -> done(r));

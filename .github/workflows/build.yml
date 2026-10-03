@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Ferry
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +20,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.14.3
-
       - name: Build signed APK
         env:
           FERRY_KEY: ${{ secrets.FERRY_KEY }}
@@ -29,10 +28,35 @@ jobs:
           echo "$FERRY_KEY" | base64 -d > ferry.p12
           export FERRY_KEY_ALIAS=$(keytool -list -keystore ferry.p12 -storetype pkcs12 -storepass "$FERRY_KEY_PASSWORD" | grep PrivateKeyEntry | cut -d, -f1)
           gradle assembleRelease
+          cp build/outputs/apk/release/*.apk Ferry.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: Ferry.apk
 
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build Ferry.exe
+        run: dotnet publish desktop/Ferry.csproj -c Release -o out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exe
+          path: out/Ferry.exe
+
+  release:
+    needs: [android, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          cp build/outputs/apk/release/*.apk Ferry.apk
-          gh release create "v${{ github.run_number }}" Ferry.apk --title "Ferry 1.${{ github.run_number }}" --notes "Built from ${{ github.sha }}"
+        run: gh release create "v${{ github.run_number }}" Ferry.apk Ferry.exe --title "Ferry 1.${{ github.run_number }}" --notes "Built from ${{ github.sha }}"

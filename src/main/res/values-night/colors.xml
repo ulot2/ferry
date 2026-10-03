@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ground">#08121F</color>
+    <color name="surface">#13233A</color>
+    <color name="ink">#E6EDF5</color>
+    <color name="ink_muted">#9AAABD</color>
+    <color name="outline">#2A3D55</color>
+    <color name="card_stroke">#2A3D55</color>
+    <color name="starboard">#3DD68C</color>
+    <color name="port">#FF6B6F</color>
+    <color name="ripple">#24E6EDF5</color>
+</resources>
