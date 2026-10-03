@@ -20,4 +20,8 @@
     <color name="steady">#1E8E5A</color>
     <color name="adrift">#B3261E</color>
     <color name="ripple">#1F0F2A44</color>
+    <!-- The launcher icon keeps the day chart in both themes (not overridden in values-night). -->
+    <color name="icon_water">#DCEBF2</color>
+    <color name="icon_ink">#0F2A44</color>
+    <color name="icon_course">#A3125F</color>
 </resources>
