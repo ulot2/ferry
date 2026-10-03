@@ -74,16 +74,24 @@ After pairing, do these steps on the phone:
 When text arrives, the other device shows it:
 
 - On the phone, a notification without sound shows the text for 8 seconds.
-- On the laptop, a pop-up shows the text. To stop the pop-ups, clear **Pop-ups** in the window or **Show pop-ups** in the tray menu.
+- On the laptop, a pop-up shows the text. To stop the pop-ups, turn off the **Pop-ups** chip in the window, or clear **Show pop-ups** in the tray menu.
 - If the text is one web link, the notice offers to open it. On the phone, tap the notification or **Open link**. On the laptop, click the pop-up. Ferry never opens a link by itself, and it only opens web links (http and https).
 
-Both apps keep the last 10 crossings (transfers). The newest one is on the crossing ticket at the top. To copy an earlier one again, tap it on the phone, or double-click it on the laptop.
+### What the screen shows
 
-The status light shows the connection:
+Both apps show your clipboard as a sea chart. The laptop and the phone are two harbors, and a magenta course line joins them. The arrow on the line points the way the last crossing (transfer) went, and the label on the line gives its time.
 
-- Green: connected.
-- Red: offline. Ferry tries again every 5 seconds.
-- Gray: connecting or paused. On the phone, gray also means "not paired".
+Under the chart, the newest crossing shows in large text. The earlier ones are in the **logbook**: the app keeps the last 10. To copy an earlier one again, tap it on the phone, or double-click it on the laptop.
+
+The pill in the top-right corner of the chart shows the connection:
+
+- **Steady link** (green dot): connected.
+- **Adrift** (red dot): offline. Ferry tries again every 5 seconds.
+- **Connecting**, **Paused** or **Not paired** (grey dot).
+
+The switches are chips under the logbook: a filled chip is on, an outlined chip is off.
+
+Both apps follow the light or dark setting of the device. Light mode is a day chart (pale blue water). Dark mode is a soft charcoal night chart.
 
 If a device is offline for a short time, it gets the missed copies when it connects again. A copy that is more than 10 minutes old goes into the history only. It does not replace what is in your clipboard now.
 
@@ -129,13 +137,13 @@ Ferry moves images too. Images are encrypted the same way as text.
 | Laptop to phone | Copy an image, or take a screenshot with **Win+Shift+S** or **PrtScn**. It goes into the phone clipboard and into **Pictures/Ferry** on the phone. |
 | Phone to laptop, a copied image | Copy the image (for example **Copy image** in Chrome). Ferry Auto sends it by itself. In Ferry, tap **Send clipboard**. |
 | Phone to laptop, any image | Tap **Share** and choose **Send to laptop**. |
-| Phone to laptop, screenshots | Turn on **Send screenshots automatically** in Ferry (see below). |
+| Phone to laptop, screenshots | Turn on the **Screenshots** chip in Ferry (see below). |
 
 On the laptop, an image from the phone goes into the clipboard (press **Ctrl+V** to paste) and into **Pictures\Ferry**.
 
-**Send screenshots automatically** is off until you turn it on, because screenshots can show private things. When you turn it on, Android asks for the Photos permission. Choose **Allow all**: with "Allow limited access", Ferry cannot see new screenshots.
+The **Screenshots** chip is off until you turn it on, because screenshots can show private things. When you turn it on, Android asks for the Photos permission. Choose **Allow all**: with "Allow limited access", Ferry cannot see new screenshots.
 
-To stop images in either direction, turn off **Images** in Ferry on the phone, or **Send and receive images** on the laptop.
+To stop images in either direction, turn off the **Images** chip in Ferry on the phone or in the laptop window. On the laptop, **Send and receive images** in the tray menu does the same.
 
 Limits for images:
 
@@ -229,4 +237,6 @@ The Android build needs JDK 21, the Android SDK, and Gradle 8.14. Copy the key t
 | `tools/install-ferry-auto.ps1` | Installs Ferry Auto from a Windows computer |
 | `src/main/java/app/ferry/Crypto.java`, `desktop/Crypto.cs` | The encryption. Both files must stay identical in behavior. |
 | `PRODUCT.md` | Who Ferry is for and what it must do |
-| `DESIGN.md` | The Harbor design: colors, type, and the crossing ticket |
+| `DESIGN.md` | The Nautical chart design: colors for light and dark mode, type, and the chart |
+| `desktop/ferry.ico` | The Windows icon (taskbar, Start menu, notification pop-ups) |
+| `FONT-LICENSE-Barlow.txt` | License of the Barlow font that both apps use |

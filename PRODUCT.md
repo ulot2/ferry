@@ -33,7 +33,7 @@ No account and no server of its own. The two devices pair by scanning a QR code;
 
 ## Brand Commitments
 - Name: Ferry. A "crossing" is one clipboard transfer.
-- Visual direction "Harbor", chosen by the owner: deep navy with a signal-yellow accent, last transfer shown as a boarding-pass style crossing card, same look on phone and laptop.
+- Visual direction "Nautical chart", chosen by the owner from four options: the two devices are harbors on a sea chart joined by a magenta course line, the history is a logbook, same look on phone and laptop. Light mode is a day chart; dark mode is soft charcoal (the owner rejected pure black as harsh). Details in DESIGN.md.
 
 ## Evidence on Hand
 No users, reviews, or metrics. Do not invent any.
