@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Harbor type roles and components. See DESIGN.md. -->
 <resources>
+    <!-- Empty base: "Ferry.X" names make Android look for a parent called "Ferry". -->
+    <style name="Ferry" />
+
     <style name="Ferry.Wordmark">
         <item name="android:textSize">14sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
