@@ -27,7 +27,9 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             v="${GITHUB_REF_NAME#v}"
           else
-            last=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || echo v0.0.0)
+            # The highest release tag in the repo, even when it sits on a main merge commit that dev does not contain.
+            last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+            last="${last:-v0.0.0}"
             v="${last#v}-dev.${GITHUB_RUN_NUMBER}"
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
@@ -52,12 +54,15 @@ jobs:
         run: |
           echo "$FERRY_KEY" | base64 -d > ferry.p12
           export FERRY_KEY_ALIAS=$(keytool -list -keystore ferry.p12 -storetype pkcs12 -storepass "$FERRY_KEY_PASSWORD" | grep PrivateKeyEntry | cut -d, -f1)
-          gradle assembleRelease
-          cp build/outputs/apk/release/*.apk Ferry.apk
+          gradle assembleStandardRelease assembleAutoRelease
+          cp build/outputs/apk/standard/release/*.apk Ferry.apk
+          cp build/outputs/apk/auto/release/*.apk Ferry-Auto.apk
       - uses: actions/upload-artifact@v4
         with:
           name: apk
-          path: Ferry.apk
+          path: |
+            Ferry.apk
+            Ferry-Auto.apk
 
   desktop:
     needs: version
@@ -88,7 +93,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            gh release create "$GITHUB_REF_NAME" Ferry.apk Ferry.exe --title "Ferry $VERSION" --generate-notes --latest
+            gh release create "$GITHUB_REF_NAME" Ferry.apk Ferry-Auto.apk Ferry.exe tools/install-ferry-auto.ps1 --title "Ferry $VERSION" --generate-notes --latest
           else
-            gh release create "build-$GITHUB_RUN_NUMBER" Ferry.apk Ferry.exe --target "$GITHUB_SHA" --prerelease --title "Ferry $VERSION" --notes "Built from $GITHUB_SHA"
+            gh release create "build-$GITHUB_RUN_NUMBER" Ferry.apk Ferry-Auto.apk Ferry.exe tools/install-ferry-auto.ps1 --target "$GITHUB_SHA" --prerelease --title "Ferry $VERSION" --notes "Built from $GITHUB_SHA"
           fi

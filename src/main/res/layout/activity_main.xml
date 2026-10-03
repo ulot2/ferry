@@ -174,18 +174,18 @@ FORM: Owner-pinned "Harbor" direction (chosen in the question round, no seed rol
                 android:layout_height="wrap_content" />
 
             <TextView
+                android:id="@+id/updateBody"
                 style="@style/Ferry.Body"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Download it, then install it over this version. Your pairing and history stay." />
+                android:layout_marginTop="6dp" />
 
             <Button
                 android:id="@+id/update"
                 style="@style/Ferry.Button.Secondary"
                 android:layout_width="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="Download update" />
+                />
         </LinearLayout>
 
         <!-- Automatic sending (opt-in accessibility service). -->

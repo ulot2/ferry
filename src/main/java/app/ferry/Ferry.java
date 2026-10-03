@@ -110,9 +110,17 @@ final class Ferry {
         return p.length() > 160 ? p.substring(0, 160) + "…" : p;
     }
 
+    /** True in Ferry Auto, the edition with automatic sending (installed from a computer). */
+    static boolean autoEdition(Context c) {
+        return c.getResources().getBoolean(R.bool.has_auto_send);
+    }
+
     static boolean autoSendOn(Context c) {
+        if (!autoEdition(c)) return false;
+        // By name: AutoSendService only exists in the auto edition's sources.
+        String service = new ComponentName(c.getPackageName(), "app.ferry.AutoSendService").flattenToString();
         String on = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        return on != null && on.contains(new ComponentName(c, AutoSendService.class).flattenToString());
+        return on != null && on.contains(service);
     }
 
     /** Encrypts and sends text to the laptop. Blocks, so call it off the main thread. */

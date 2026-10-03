@@ -2,7 +2,7 @@
 
 Ferry moves clipboard text between a Windows laptop and an Android phone.
 
-When you copy text on the laptop, the text goes into the clipboard of the phone within a second or two. When you copy text on the phone, Ferry sends it to the laptop: with one tap, or by itself if you turn on automatic sending. You do not need an account. The two devices pair when the phone scans a QR code, and all text is encrypted end to end (only your two devices can read it).
+When you copy text on the laptop, the text goes into the clipboard of the phone within a second or two. When you copy text on the phone, Ferry sends it to the laptop with one tap, or by itself in Ferry Auto. You do not need an account. The two devices pair when the phone scans a QR code, and all text is encrypted end to end (only your two devices can read it).
 
 ## How it works
 
@@ -32,6 +32,15 @@ Ferry opens a window with a QR code. It also adds an icon to the system tray (th
 
 ### On the phone
 
+Ferry for Android comes in two editions. Both work with the same laptop app, and you can change from one to the other later without pairing again.
+
+| Edition | Phone to laptop | How to install |
+|---|---|---|
+| **Ferry** (`Ferry.apk`) | One tap: the notification button, the tile, or Share | On the phone, from the browser |
+| **Ferry Auto** (`Ferry-Auto.apk`) | By itself, after each copy | From a Windows computer (see [Ferry Auto](#ferry-auto-automatic-sending)) |
+
+If you are not sure, install Ferry.
+
 1. Download `Ferry.apk` on the phone and open it.
 2. If Android asks, allow installs from that app.
 3. Open Ferry.
@@ -49,7 +58,7 @@ After pairing, do these steps on the phone:
 
 1. Tap **Allow background use**. Without it, Android cuts the connection when the phone sleeps.
 2. On a Xiaomi, Redmi or POCO phone, open **Settings > Apps > Ferry** and turn on **Autostart**.
-3. Optional: turn on automatic sending (see the next section).
+3. In Ferry Auto: turn on automatic sending (see [Ferry Auto](#ferry-auto-automatic-sending)).
 4. Optional: add the **Send clipboard** tile to the quick settings panel.
 
 ## Use Ferry
@@ -57,7 +66,7 @@ After pairing, do these steps on the phone:
 | To send | Do this |
 |---|---|
 | Laptop to phone | Copy text on the laptop. It goes into the phone clipboard. |
-| Phone to laptop, automatic | Turn on automatic sending once. Then copy text on the phone as usual. |
+| Phone to laptop, automatic (Ferry Auto) | Turn on automatic sending once. Then copy text on the phone as usual. |
 | Phone to laptop, by hand | Copy text on the phone. Then tap **Send clipboard** in the Ferry notification or in the quick settings tile. |
 | Selected text on the phone | Select the text and choose **Send to laptop** in the menu. |
 | Text from another phone app | Tap **Share** and choose **Send to laptop**. |
@@ -77,16 +86,32 @@ The status light shows the connection:
 
 If a device is offline for a short time, it gets the missed copies when it connects again. A copy that is more than 10 minutes old goes into the history only. It does not replace what is in your clipboard now.
 
-## Automatic sending on the phone
+## Ferry Auto (automatic sending)
 
-Android does not let apps read the clipboard in the background. To send copies by itself, Ferry uses Android's accessibility permission. With this permission, Ferry notices when you tap a **Copy** button. Then it reads the clipboard and sends the text. Ferry does not read the screen.
+Android does not let apps read the clipboard in the background. To send copies by itself, Ferry Auto uses Android's accessibility permission. With this permission, Ferry notices when you tap a **Copy** button. Then it reads the clipboard and sends the text. Ferry does not read the screen.
 
-To turn it on:
+Google Play Protect blocks apps with this permission when you install them from a phone browser. It does not block installs from a computer. For this reason, Ferry Auto is a separate edition that you install from a Windows computer.
 
-1. In Ferry, tap **Turn on** on the "Send copies automatically" card.
+### Install or update Ferry Auto
+
+1. On the Windows computer, download `install-ferry-auto.ps1` from the latest release on the [Releases page](../../releases/latest).
+2. Open PowerShell in the download folder.
+3. Run this command:
+
+```bash
+powershell -ExecutionPolicy Bypass -File install-ferry-auto.ps1
+```
+
+4. Follow the steps that the script shows. The script turns on a connection to the phone over Wi-Fi ("Wireless debugging"), and you type a 6-digit pairing code from the phone. Then the script installs Ferry Auto.
+
+Ferry Auto installs over Ferry. Your pairing and history stay. To update Ferry Auto later, run the script again.
+
+### Turn on automatic sending
+
+1. In Ferry Auto, tap **Turn on** on the "Send copies automatically" card.
 2. In the accessibility settings, open **Ferry automatic sending** and turn it on.
 
-If the switch is greyed out, Android blocks it because you installed Ferry from a file. Do these steps:
+If the switch is greyed out, Android blocks it because the app did not come from an app store. Do these steps:
 
 1. In Ferry, tap **App info**.
 2. Tap the ⋮ menu in the top-right corner, then tap **Allow restricted settings**.
@@ -99,7 +124,7 @@ Automatic sending works for Copy buttons that show the word "Copy" in the langua
 Both apps look for a newer release on GitHub:
 
 - On the laptop, a pop-up shows when an update is ready. Click it, or choose **Update to Ferry x.y.z** in the tray menu. Ferry downloads the update and restarts by itself.
-- On the phone, an "update is ready" card shows. Tap **Download update**, then install the file over the current app.
+- On the phone, an "update is ready" card shows. In Ferry, tap **Download update**, then install the file over the current app. In Ferry Auto, run the install script again on the computer.
 
 Your pairing and history stay after an update.
 
@@ -158,7 +183,7 @@ The `keys/` folder is not in Git. Keep a backup of it. If you lose the key, you 
 To build on your own computer:
 
 ```bash
-gradle assembleRelease
+gradle assembleStandardRelease assembleAutoRelease
 ```
 ```bash
 dotnet publish desktop/Ferry.csproj -c Release -o out
@@ -171,7 +196,9 @@ The Android build needs JDK 21, the Android SDK, and Gradle 8.14. Copy the key t
 | Path | Contents |
 |---|---|
 | `src/main/` | Android app (Java, Android framework views) |
+| `src/auto/` | Ferry Auto only: the automatic-sending service |
 | `desktop/` | Windows tray app (C#, Windows Forms) |
+| `tools/install-ferry-auto.ps1` | Installs Ferry Auto from a Windows computer |
 | `src/main/java/app/ferry/Crypto.java`, `desktop/Crypto.cs` | The encryption. Both files must stay identical in behavior. |
 | `PRODUCT.md` | Who Ferry is for and what it must do |
 | `DESIGN.md` | The Harbor design: colors, type, and the crossing ticket |

@@ -37,10 +37,11 @@ import java.util.Locale;
 
 /** The terminal screen: link status, last crossing, Send, history, pairing, and notices. See DESIGN.md. */
 public class MainActivity extends Activity implements SharedPreferences.OnSharedPreferenceChangeListener {
+    private static final String FERRY_AUTO_HELP = "https://github.com/ulot2/ferry#ferry-auto-automatic-sending";
     private View header, lamp, ticket, manualRow, batteryCard, xiaomiCard, updateCard, autoCard, historyCard, autoAppInfo;
     private TextView statusText, headerLine, route, preview, stubTime, stubDay, pairTitle, pairBody, pairError,
-            updateTitle, autoTitle, autoBody;
-    private Button send, scan, pairAlt, autoToggle;
+            updateTitle, updateBody, autoTitle, autoBody;
+    private Button send, scan, pairAlt, autoToggle, updateButton;
     private ViewGroup historyList;
     private EditText codeField;
     private int headerTop;
@@ -71,6 +72,8 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         pairBody = findViewById(R.id.pairBody);
         pairError = findViewById(R.id.pairError);
         updateTitle = findViewById(R.id.updateTitle);
+        updateBody = findViewById(R.id.updateBody);
+        updateButton = findViewById(R.id.update);
         autoTitle = findViewById(R.id.autoTitle);
         autoBody = findViewById(R.id.autoBody);
         send = findViewById(R.id.send);
@@ -106,9 +109,13 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             render();
         });
         findViewById(R.id.clearHistory).setOnClickListener(v -> Ferry.clearHistory(this));
-        findViewById(R.id.update).setOnClickListener(v ->
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(Ferry.prefs(this).getString("update_url", "")))));
-        autoToggle.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        // Ferry Auto cannot be installed from the phone (Play Protect), so its buttons lead to the computer steps instead.
+        boolean autoEdition = Ferry.autoEdition(this);
+        findViewById(R.id.update).setOnClickListener(v -> open(autoEdition ? FERRY_AUTO_HELP : Ferry.prefs(this).getString("update_url", "")));
+        autoToggle.setOnClickListener(v -> {
+            if (autoEdition) startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            else open(FERRY_AUTO_HELP);
+        });
         View.OnClickListener appInfo = v -> startActivity(new Intent(
                 Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
         autoAppInfo.setOnClickListener(appInfo);
@@ -257,18 +264,33 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             pairAlt.setText(manualRow.getVisibility() == View.VISIBLE ? "Hide code entry" : "Type the code");
         }
 
+        boolean autoEdition = Ferry.autoEdition(this);
         String update = p.getString("update_version", "");
+        // The saved result may predate an install (for example Ferry Auto over Ferry), so check it against this version.
+        if (!update.isEmpty() && !Updates.newer(update, Updates.installed(this))) update = "";
         updateCard.setVisibility(update.isEmpty() ? View.GONE : View.VISIBLE);
-        updateTitle.setText("Ferry " + update + " is ready");
+        updateTitle.setText((autoEdition ? "Ferry Auto " : "Ferry ") + update + " is ready");
+        updateBody.setText(autoEdition
+                ? "Install it from your computer, the same way you installed Ferry Auto. Your pairing and history stay."
+                : "Download it, then install it over this version. Your pairing and history stay.");
+        updateButton.setText(autoEdition ? "How to update" : "Download update");
 
         autoCard.setVisibility(paired ? View.VISIBLE : View.GONE);
-        autoTitle.setText(auto ? "Automatic sending is on" : "Send copies automatically");
-        autoBody.setText(auto
-                ? "Every copy on this phone goes to " + laptop + " by itself. Turn it off in Android's accessibility settings."
-                : "Skip the Send button. Ferry uses Android's accessibility permission to notice taps on Copy. It does not read the screen.\n\n"
-                + "If the switch is greyed out, open App info, tap the ⋮ menu, then Allow restricted settings.");
-        autoToggle.setText(auto ? "Turn off" : "Turn on");
-        autoAppInfo.setVisibility(auto ? View.GONE : View.VISIBLE);
+        if (autoEdition) {
+            autoTitle.setText(auto ? "Automatic sending is on" : "Send copies automatically");
+            autoBody.setText(auto
+                    ? "Every copy on this phone goes to " + laptop + " by itself. Turn it off in Android's accessibility settings."
+                    : "Skip the Send button. Ferry uses Android's accessibility permission to notice taps on Copy. It does not read the screen.\n\n"
+                    + "If the switch is greyed out, open App info, tap the ⋮ menu, then Allow restricted settings.");
+            autoToggle.setText(auto ? "Turn off" : "Turn on");
+            autoAppInfo.setVisibility(auto ? View.GONE : View.VISIBLE);
+        } else {
+            autoTitle.setText("Want copies to send by themselves?");
+            autoBody.setText("That needs Ferry Auto, a second edition of this app. Google Play Protect blocks it in phone browsers, "
+                    + "so you install it from a Windows computer with one script. Your pairing and history stay.");
+            autoToggle.setText("How to get Ferry Auto");
+            autoAppInfo.setVisibility(View.GONE);
+        }
 
         PowerManager pm = getSystemService(PowerManager.class);
         batteryCard.setVisibility(paired && !pm.isIgnoringBatteryOptimizations(getPackageName()) ? View.VISIBLE : View.GONE);
@@ -296,6 +318,10 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             row.setOnClickListener(v -> copyAgain(text));
             historyList.addView(row);
         }
+    }
+
+    private void open(String url) {
+        if (!url.isEmpty()) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
     }
 
     private void copyAgain(String text) {

@@ -34,11 +34,12 @@ final class Updates {
                 con.disconnect();
             }
             String version = release.getString("tag_name").replaceFirst("^v", "");
+            String file = Ferry.autoEdition(c) ? "Ferry-Auto.apk" : "Ferry.apk";   // stay on the same edition
             String apk = "";
             JSONArray assets = release.optJSONArray("assets");
             for (int i = 0; assets != null && i < assets.length(); i++) {
                 JSONObject a = assets.getJSONObject(i);
-                if ("Ferry.apk".equals(a.optString("name"))) apk = a.optString("browser_download_url");
+                if (file.equals(a.optString("name"))) apk = a.optString("browser_download_url");
             }
             boolean newer = !apk.isEmpty() && newer(version, installed(c));
             Ferry.prefs(c).edit()
