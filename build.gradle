@@ -1,0 +1,33 @@
+plugins {
+    id 'com.android.application' version '8.13.0'
+}
+
+def build = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+
+android {
+    namespace 'app.ferry'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'app.ferry'
+        minSdk 29
+        targetSdk 36
+        versionCode build
+        versionName "1.$build"
+    }
+
+    // The key comes from GitHub secrets (see .github/workflows/build.yml). A local copy is in keys/.
+    signingConfigs {
+        release {
+            storeFile file('ferry.p12')
+            storeType 'pkcs12'
+            storePassword System.getenv('FERRY_KEY_PASSWORD')
+            keyAlias System.getenv('FERRY_KEY_ALIAS')
+            keyPassword System.getenv('FERRY_KEY_PASSWORD')
+        }
+    }
+
+    buildTypes {
+        release { signingConfig signingConfigs.release }
+    }
+}
