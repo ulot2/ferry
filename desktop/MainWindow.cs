@@ -230,6 +230,7 @@ sealed class MainWindow : Form
         history.Items.Clear();
         foreach (var item in earlier) history.Items.Add(item.Direction + ": " + TrayApp.Preview(item.Text));   // text for screen readers
         history.EndUpdate();
+        history.Visible = !pairing && earlier.Count > 0;   // empty: the painted hint under the rule shows instead
         if (hint == "Copied.") hint = "";
 
         ClientSize = new Size(S(420), S(pairing ? 560 : 616));
