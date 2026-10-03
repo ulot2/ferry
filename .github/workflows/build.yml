@@ -1,6 +1,7 @@
 name: Build Ferry
 
-# A push to main or dev makes a pre-release build. Pushing a tag like v1.2.0 makes the real release
+# A push to main or dev only builds, to prove the code still compiles; the files stay on the run page
+# (download them with "gh run download"). Pushing a tag like v1.2.0 builds and publishes the release
 # that the apps offer as an update.
 on:
   push:
@@ -81,6 +82,7 @@ jobs:
 
   release:
     needs: [version, android, desktop]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,9 +93,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            gh release create "$GITHUB_REF_NAME" Ferry.apk Ferry-Auto.apk Ferry.exe tools/install-ferry-auto.ps1 --title "Ferry $VERSION" --generate-notes --latest
-          else
-            gh release create "build-$GITHUB_RUN_NUMBER" Ferry.apk Ferry-Auto.apk Ferry.exe tools/install-ferry-auto.ps1 --target "$GITHUB_SHA" --prerelease --title "Ferry $VERSION" --notes "Built from $GITHUB_SHA"
-          fi
+        run: gh release create "$GITHUB_REF_NAME" Ferry.apk Ferry-Auto.apk Ferry.exe tools/install-ferry-auto.ps1 --title "Ferry $VERSION" --generate-notes --latest
