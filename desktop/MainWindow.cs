@@ -17,10 +17,12 @@ FORM: Owner-pinned "Harbor" direction, single-column terminal stack, same as the
 sealed class MainWindow : Form
 {
     readonly TrayApp app;
-    readonly Label headerLine, title, body, codeLabel;
+    readonly Label headerLine, title, body, codeLabel, historyTitle, historyHint, historyEmpty;
     readonly TextBox code;
-    readonly PillButton copy, done, showCode, reset;
-    readonly CheckBox pause, autostart;
+    readonly ListBox history;
+    readonly PillButton copy, done, showCode, reset, clear;
+    readonly CheckBox pause, popups, autostart;
+    List<Crossing> earlier = [];
     readonly Font kicker = new("Segoe UI Semibold", 7.5f), route = new("Segoe UI Semibold", 13f), small = new("Segoe UI", 9f),
         stubTime = new("Segoe UI Semibold", 17f), wordmark = new("Segoe UI Semibold", 10.5f), pill = new("Segoe UI Semibold", 8.25f);
     bool pairingShown;
@@ -62,16 +64,41 @@ sealed class MainWindow : Form
         };
         Controls.Add(code);
         copy = AddButton("Copy code", PillKind.Secondary, 268, 550, 88, 36);
-        copy.Click += (_, _) => app.CopyQuietly(app.Settings.Topic);
+        copy.Click += (_, _) => app.CopyQuietly(app.Settings.Code);
         done = AddButton("Done", PillKind.Secondary, 268, 590, 88, 32);
         done.Click += (_, _) => HidePairing();
 
-        // Paired view.
-        pause = AddCheck("Pause syncing", 320);
+        // Paired view: earlier crossings, settings, pairing.
+        historyTitle = AddLabel(24, 314, 220, 22, Harbor.Ink, Harbor.Ground, new Font("Segoe UI Semibold", 9.75f));
+        historyTitle.Text = "Earlier crossings";
+        historyHint = AddLabel(24, 334, 260, 18, Harbor.InkMuted, Harbor.Ground, small);
+        historyHint.Text = "Double-click one, or press Enter, to copy it again.";
+        clear = AddButton("Clear", PillKind.Quiet, 288, 312, 80, 28);
+        clear.Click += (_, _) => app.ClearHistory();
+        history = new ListBox
+        {
+            Bounds = new Rectangle(24, 358, 332, 196),
+            BorderStyle = BorderStyle.None,
+            BackColor = Harbor.Surface,
+            ForeColor = Harbor.Ink,
+            DrawMode = DrawMode.OwnerDrawFixed,
+            IntegralHeight = false,
+            AccessibleName = "Earlier crossings",
+        };
+        history.DrawItem += DrawHistoryItem;
+        history.DoubleClick += (_, _) => CopySelected();
+        history.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) CopySelected(); };
+        Controls.Add(history);
+        historyEmpty = AddLabel(40, 374, 300, 40, Harbor.InkMuted, Harbor.Surface, small);
+        historyEmpty.Text = "Earlier crossings show up here, newest first.";
+
+        pause = AddCheck("Pause", 24, 566, 80);
         pause.CheckedChanged += (_, _) => app.Paused = pause.Checked;
-        autostart = AddCheck("Start with Windows", 350);
+        popups = AddCheck("Pop-ups", 112, 566, 92);
+        popups.CheckedChanged += (_, _) => app.Popups = popups.Checked;
+        autostart = AddCheck("Start with Windows", 212, 566, 150);
         autostart.CheckedChanged += (_, _) => app.StartWithWindows = autostart.Checked;
-        showCode = AddButton("Show pairing code", PillKind.Secondary, 24, 392, 168, 40);
+        showCode = AddButton("Show pairing code", PillKind.Secondary, 24, 604, 168, 36);
         showCode.Click += (_, _) => { pairingShown = true; Render(); };
 
         reset = AddButton("Reset pairing", PillKind.Quiet, 12, 590, 124, 32);   // quiet text starts 12 px in, so it lines up at 24
@@ -95,11 +122,36 @@ sealed class MainWindow : Form
         return button;
     }
 
-    CheckBox AddCheck(string text, int y)
+    CheckBox AddCheck(string text, int x, int y, int w)
     {
-        var box = new CheckBox { Text = text, Bounds = new Rectangle(24, y, 332, 26), ForeColor = Harbor.Ink, BackColor = Harbor.Ground };
+        var box = new CheckBox { Text = text, Bounds = new Rectangle(x, y, w, 26), ForeColor = Harbor.Ink, BackColor = Harbor.Ground };
         Controls.Add(box);
         return box;
+    }
+
+    void CopySelected()
+    {
+        if (history.SelectedIndex < 0 || history.SelectedIndex >= earlier.Count) return;
+        app.CopyQuietly(earlier[history.SelectedIndex].Text);
+        historyHint.Text = "Copied.";
+    }
+
+    void DrawHistoryItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0 || e.Index >= earlier.Count) return;
+        var item = earlier[e.Index];
+        bool selected = (e.State & DrawItemState.Selected) != 0;
+        using (var back = new SolidBrush(selected ? Harbor.Hover : Harbor.Surface)) e.Graphics.FillRectangle(back, e.Bounds);
+        float s = DeviceDpi / 96f;
+        var b = e.Bounds;
+        string when = item.Time.Date == DateTime.Today ? item.Time.ToString("t") : item.Time.ToString("d MMM, t");
+        TextRenderer.DrawText(e.Graphics, $"{item.Direction}  ·  {when}", small,
+            new Rectangle(b.X + (int)(12 * s), b.Y + (int)(5 * s), b.Width - (int)(24 * s), (int)(18 * s)), Harbor.InkMuted,
+            TextFormatFlags.Left | TextFormatFlags.SingleLine);
+        TextRenderer.DrawText(e.Graphics, TrayApp.Preview(item.Text), Font,
+            new Rectangle(b.X + (int)(12 * s), b.Y + (int)(22 * s), b.Width - (int)(24 * s), (int)(20 * s)), Harbor.Ink,
+            TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+        e.DrawFocusRectangle();
     }
 
     int S(int v) => (int)Math.Round(v * DeviceDpi / 96f);
@@ -162,22 +214,34 @@ sealed class MainWindow : Form
 
         Text = "Ferry · " + app.StatusLabel;
         headerLine.Text = paired
-            ? $"Copies on this laptop land on {st.Peer}. Copies sent from the phone land here."
+            ? $"Copies on this laptop land on {st.Peer}. Copies from the phone land here. All encrypted."
             : "Ferry moves your clipboard between this laptop and your phone.";
         title.Text = pairing ? (paired ? "Pair a phone again" : "Pair your phone") : $"Paired with {st.Peer}";
         body.Text = pairing
             ? "Open Ferry on your phone and tap Scan QR code. Then point the phone at this code."
-            : "Copies cross to your phone by themselves. On the phone, tap Send to cross the other way.";
+            : "Copies cross to your phone by themselves. On the phone, tap Send, or turn on automatic sending.";
 
         codeLabel.Visible = code.Visible = copy.Visible = pairing;
         done.Visible = pairing && paired;
-        pause.Visible = autostart.Visible = showCode.Visible = !pairing;
-        code.Text = st.Topic;
+        foreach (Control c in new Control[] { historyTitle, historyHint, clear, history, pause, popups, autostart, showCode })
+            c.Visible = !pairing;
+        code.Text = Crypto.Grouped(st.Code);
         pause.Checked = st.Paused;
+        popups.Checked = st.Popups;
         autostart.Checked = app.StartWithWindows;
 
-        ClientSize = new Size(S(380), S(pairing ? 628 : 480));
-        reset.Top = S(pairing ? 590 : 436);
+        // The ticket shows the newest crossing; the list holds the ones before it.
+        earlier = st.History.Skip(1).ToList();
+        history.ItemHeight = S(46);
+        history.BeginUpdate();
+        history.Items.Clear();
+        foreach (var item in earlier) history.Items.Add(item.Direction + ": " + TrayApp.Preview(item.Text));   // text for screen readers
+        history.EndUpdate();
+        historyEmpty.Visible = !pairing && earlier.Count == 0;
+        if (earlier.Count == 0 || historyHint.Text == "Copied.") historyHint.Text = "Double-click one, or press Enter, to copy it again.";
+
+        ClientSize = new Size(S(380), S(pairing ? 628 : 656));
+        reset.Location = pairing ? new Point(S(12), S(590)) : new Point(S(200), S(606));
         Invalidate();
     }
 
@@ -191,6 +255,13 @@ sealed class MainWindow : Form
         using (var navy = new SolidBrush(Harbor.Navy)) g.FillRectangle(navy, 0, 0, ClientSize.Width, 150 * s);
         Harbor.DrawWordmark(g, wordmark, 24 * s, 22 * s, 3.5f * s);
         DrawStatusPill(g, s);
+        if (history.Visible)
+        {
+            // A surface card around the history list, like the phone's history card.
+            using var card = Harbor.RoundRect(new RectangleF(16 * s, 352 * s, 348 * s, 206 * s), 12 * s);
+            using (var surface = new SolidBrush(Harbor.Surface)) g.FillPath(surface, card);
+            if (Harbor.Dark) using (var edge = new Pen(Harbor.Outline, s)) g.DrawPath(edge, card);
+        }
         DrawTicket(g, s);
         if (code.Visible) DrawQr(g, s);
     }

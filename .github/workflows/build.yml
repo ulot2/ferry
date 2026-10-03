@@ -1,15 +1,39 @@
 name: Build Ferry
 
+# A push to main or dev makes a pre-release build. Pushing a tag like v1.2.0 makes the real release
+# that the apps offer as an update.
 on:
   push:
     branches: [main, dev]
+    tags: ['v*.*.*']
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        # Tag builds use the tag. Other builds use the last release tag plus "-dev.<run>",
+        # so the apps never offer them as updates.
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            last=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || echo v0.0.0)
+            v="${last#v}-dev.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
   android:
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +48,7 @@ jobs:
         env:
           FERRY_KEY: ${{ secrets.FERRY_KEY }}
           FERRY_KEY_PASSWORD: ${{ secrets.FERRY_KEY_PASSWORD }}
+          FERRY_VERSION: ${{ needs.version.outputs.version }}
         run: |
           echo "$FERRY_KEY" | base64 -d > ferry.p12
           export FERRY_KEY_ALIAS=$(keytool -list -keystore ferry.p12 -storetype pkcs12 -storepass "$FERRY_KEY_PASSWORD" | grep PrivateKeyEntry | cut -d, -f1)
@@ -35,6 +60,7 @@ jobs:
           path: Ferry.apk
 
   desktop:
+    needs: version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,14 +68,14 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Build Ferry.exe
-        run: dotnet publish desktop/Ferry.csproj -c Release -o out
+        run: dotnet publish desktop/Ferry.csproj -c Release -o out -p:Version=${{ needs.version.outputs.version }}
       - uses: actions/upload-artifact@v4
         with:
           name: exe
           path: out/Ferry.exe
 
   release:
-    needs: [android, desktop]
+    needs: [version, android, desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,5 +85,10 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        # Every push makes a pre-release build; named versions (v1.0.0 and later) are the real releases.
-        run: gh release create "v${{ github.run_number }}" Ferry.apk Ferry.exe --prerelease --title "Ferry build ${{ github.run_number }}" --notes "Built from ${{ github.sha }}"
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            gh release create "$GITHUB_REF_NAME" Ferry.apk Ferry.exe --title "Ferry $VERSION" --generate-notes --latest
+          else
+            gh release create "build-$GITHUB_RUN_NUMBER" Ferry.apk Ferry.exe --target "$GITHUB_SHA" --prerelease --title "Ferry $VERSION" --notes "Built from $GITHUB_SHA"
+          fi

@@ -13,7 +13,7 @@ android {
         minSdk 29
         targetSdk 36
         versionCode build
-        versionName "1.$build"
+        versionName System.getenv('FERRY_VERSION') ?: "0.0.0-local"   // set by the GitHub build from the release tag
     }
 
     // The key comes from GitHub secrets (see .github/workflows/build.yml). A local copy is in keys/.

@@ -3,6 +3,8 @@ package app.ferry;
 import android.Manifest;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
@@ -12,27 +14,35 @@ import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.format.DateUtils;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.text.DateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-/** The terminal screen: link status, last crossing, Send, pairing, and notices. See DESIGN.md. */
+/** The terminal screen: link status, last crossing, Send, history, pairing, and notices. See DESIGN.md. */
 public class MainActivity extends Activity implements SharedPreferences.OnSharedPreferenceChangeListener {
-    private View header, lamp, ticket, manualRow, batteryCard, xiaomiCard;
-    private TextView statusText, headerLine, route, preview, stubTime, stubDay, pairTitle, pairBody, pairError;
-    private Button send, scan, pairAlt;
-    private EditText topicField;
+    private View header, lamp, ticket, manualRow, batteryCard, xiaomiCard, updateCard, autoCard, historyCard, autoAppInfo;
+    private TextView statusText, headerLine, route, preview, stubTime, stubDay, pairTitle, pairBody, pairError,
+            updateTitle, autoTitle, autoBody;
+    private Button send, scan, pairAlt, autoToggle;
+    private ViewGroup historyList;
+    private EditText codeField;
     private int headerTop;
 
     @Override
@@ -47,6 +57,10 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         manualRow = findViewById(R.id.manualRow);
         batteryCard = findViewById(R.id.batteryCard);
         xiaomiCard = findViewById(R.id.xiaomiCard);
+        updateCard = findViewById(R.id.updateCard);
+        autoCard = findViewById(R.id.autoCard);
+        historyCard = findViewById(R.id.historyCard);
+        autoAppInfo = findViewById(R.id.autoAppInfo);
         statusText = findViewById(R.id.statusText);
         headerLine = findViewById(R.id.headerLine);
         route = findViewById(R.id.route);
@@ -56,44 +70,54 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         pairTitle = findViewById(R.id.pairTitle);
         pairBody = findViewById(R.id.pairBody);
         pairError = findViewById(R.id.pairError);
+        updateTitle = findViewById(R.id.updateTitle);
+        autoTitle = findViewById(R.id.autoTitle);
+        autoBody = findViewById(R.id.autoBody);
         send = findViewById(R.id.send);
         scan = findViewById(R.id.scan);
         pairAlt = findViewById(R.id.pairAlt);
-        topicField = findViewById(R.id.topic);
+        autoToggle = findViewById(R.id.autoToggle);
+        historyList = findViewById(R.id.historyList);
+        codeField = findViewById(R.id.topic);
 
         // Edge to edge: the navy header runs under the status bar; the list clears the navigation bar.
         headerTop = header.getPaddingTop();
-        View scroll = findViewById(R.id.scroll);
-        scroll.setOnApplyWindowInsetsListener(this::applyInsets);
+        findViewById(R.id.scroll).setOnApplyWindowInsetsListener(this::applyInsets);
 
         send.setOnClickListener(v -> startActivity(new Intent(this, SendActivity.class)));
         scan.setOnClickListener(v -> scan());
         pairAlt.setOnClickListener(v -> {
-            if (paired()) {
+            if (Ferry.paired(this)) {
                 Ferry.unpair(this);
             } else {
                 manualRow.setVisibility(manualRow.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
-                if (manualRow.getVisibility() == View.VISIBLE) topicField.requestFocus();
+                if (manualRow.getVisibility() == View.VISIBLE) codeField.requestFocus();
             }
             render();
         });
         findViewById(R.id.manualSave).setOnClickListener(v -> {
-            String t = topicField.getText().toString().trim();
-            if (!Ferry.validTopic(t)) {
-                topicField.setError("Use only letters, numbers, - and _. The code is under the QR code on your laptop.");
+            String code = codeField.getText().toString();
+            if (!Crypto.validCode(code)) {
+                codeField.setError("The code has 26 letters and numbers. It is under the QR code on your laptop.");
                 return;
             }
-            Ferry.pair(this, t, null);
+            Ferry.pair(this, code, null);
             manualRow.setVisibility(View.GONE);
             render();
         });
+        findViewById(R.id.clearHistory).setOnClickListener(v -> Ferry.clearHistory(this));
+        findViewById(R.id.update).setOnClickListener(v ->
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(Ferry.prefs(this).getString("update_url", "")))));
+        autoToggle.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        View.OnClickListener appInfo = v -> startActivity(new Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+        autoAppInfo.setOnClickListener(appInfo);
+        findViewById(R.id.appSettings).setOnClickListener(appInfo);
         findViewById(R.id.battery).setOnClickListener(v -> startActivity(new Intent(
                 Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName()))));
-        findViewById(R.id.appSettings).setOnClickListener(v -> startActivity(new Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))));
 
         handle(getIntent());
-        if (paired()) SyncService.start(this);
+        if (Ferry.paired(this)) SyncService.start(this);
     }
 
     // The system-window inset getters cover API 29, where WindowInsets.Type does not exist yet.
@@ -122,7 +146,8 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
     protected void onResume() {
         super.onResume();
         Ferry.prefs(this).registerOnSharedPreferenceChangeListener(this);
-        render();   // also picks up a battery setting changed while we were away
+        Updates.checkSoon(this);
+        render();   // also picks up settings changed while we were away (battery, accessibility)
     }
 
     @Override
@@ -133,17 +158,14 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences p, String key) {
+        if ("last_id".equals(key) || "update_checked".equals(key)) return;   // bookkeeping, nothing on screen changes
         render();
-        if ("cross_time".equals(key) && ValueAnimator.areAnimatorsEnabled()) {
+        if ("history".equals(key) && ValueAnimator.areAnimatorsEnabled()) {
             // The one motion moment: a new ticket slides up into place.
             ticket.setAlpha(0f);
             ticket.setTranslationY(8 * getResources().getDisplayMetrics().density);
             ticket.animate().alpha(1f).translationY(0f).setDuration(200).setInterpolator(new DecelerateInterpolator()).start();
         }
-    }
-
-    private boolean paired() {
-        return !Ferry.topic(this).isEmpty();
     }
 
     private void scan() {
@@ -170,7 +192,8 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
 
     private void render() {
         SharedPreferences p = Ferry.prefs(this);
-        boolean paired = paired();
+        boolean paired = Ferry.paired(this);
+        boolean auto = paired && Ferry.autoSendOn(this);
         String peer = p.getString("peer", "");
         String laptop = peer.isEmpty() ? "your laptop" : peer;
 
@@ -190,47 +213,92 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         }
         lamp.setBackgroundTintList(ColorStateList.valueOf(lampColor));
         statusText.setText(label);
-        headerLine.setText(paired
-                ? "Copies from " + laptop + " land on this phone. Tap Send to cross the other way."
-                : "Ferry moves your clipboard between your laptop and this phone.");
+        headerLine.setText(!paired ? "Ferry moves your clipboard between your laptop and this phone."
+                : auto ? "Copies cross both ways by themselves, encrypted."
+                : "Copies from " + laptop + " land on this phone. Tap Send to cross the other way.");
 
-        // The ticket.
-        long time = p.getLong("cross_time", 0);
-        if (time == 0) {
+        // The ticket shows the newest crossing; the history card lists the ones before it.
+        JSONArray history = Ferry.history(this);
+        JSONObject last = history.optJSONObject(0);
+        if (last == null) {
             route.setText(paired ? "No crossings yet" : "Not paired yet");
             preview.setText(paired ? "Copy something on your laptop. It lands here." : "Pair with your laptop to start.");
             stubTime.setText("—");
             stubDay.setText("");
         } else {
-            route.setText(p.getString("cross_dir", ""));
-            preview.setText("“" + p.getString("cross_text", "") + "”");
-            stubTime.setText(DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date(time)));
-            stubDay.setText(DateUtils.isToday(time) ? "TODAY"
-                    : DateUtils.formatDateTime(this, time, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH).toUpperCase(Locale.getDefault()));
+            long at = last.optLong("at");
+            route.setText(last.optString("dir"));
+            preview.setText("“" + Ferry.preview(last.optString("text")) + "”");
+            stubTime.setText(DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date(at)));
+            stubDay.setText(DateUtils.isToday(at) ? "TODAY"
+                    : DateUtils.formatDateTime(this, at, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH).toUpperCase(Locale.getDefault()));
         }
+        renderHistory(history);
 
         // One primary action per state: Send when paired, Scan when not.
         send.setVisibility(paired ? View.VISIBLE : View.GONE);
         if (paired) {
+            String code = Ferry.code(this);
             pairTitle.setText("Paired with " + laptop);
-            String t = Ferry.topic(this);
-            pairBody.setText("Pairing code ends in " + t.substring(Math.max(0, t.length() - 5)) + ". Scan a new code if you reset pairing on the laptop.");
+            pairBody.setText("Pairing code ends in " + code.substring(code.length() - 4) + ". Scan a new code if you reset pairing on the laptop.");
             styleSecondary(scan);
             scan.setText("Scan new code");
             pairAlt.setText("Unpair");
         } else {
-            pairTitle.setText("Pair with your laptop");
-            pairBody.setText("On your laptop, open Ferry from the tray. Then scan the QR code it shows.");
+            pairTitle.setText(p.contains("topic") ? "Pair again" : "Pair with your laptop");
+            pairBody.setText(p.contains("topic")
+                    ? "Ferry now encrypts your text. Update Ferry on your laptop, then scan the new QR code it shows."
+                    : "On your laptop, open Ferry from the tray. Then scan the QR code it shows.");
             stylePrimary(scan);
             scan.setText("Scan QR code");
             pairAlt.setText(manualRow.getVisibility() == View.VISIBLE ? "Hide code entry" : "Type the code");
         }
+
+        String update = p.getString("update_version", "");
+        updateCard.setVisibility(update.isEmpty() ? View.GONE : View.VISIBLE);
+        updateTitle.setText("Ferry " + update + " is ready");
+
+        autoCard.setVisibility(paired ? View.VISIBLE : View.GONE);
+        autoTitle.setText(auto ? "Automatic sending is on" : "Send copies automatically");
+        autoBody.setText(auto
+                ? "Every copy on this phone goes to " + laptop + " by itself. Turn it off in Android's accessibility settings."
+                : "Skip the Send button. Ferry uses Android's accessibility permission to notice taps on Copy. It does not read the screen.\n\n"
+                + "If the switch is greyed out, open App info, tap the ⋮ menu, then Allow restricted settings.");
+        autoToggle.setText(auto ? "Turn off" : "Turn on");
+        autoAppInfo.setVisibility(auto ? View.GONE : View.VISIBLE);
 
         PowerManager pm = getSystemService(PowerManager.class);
         batteryCard.setVisibility(paired && !pm.isIgnoringBatteryOptimizations(getPackageName()) ? View.VISIBLE : View.GONE);
         String maker = Build.MANUFACTURER.toLowerCase(Locale.ROOT);
         boolean xiaomi = maker.contains("xiaomi") || maker.contains("redmi") || maker.contains("poco");
         xiaomiCard.setVisibility(paired && xiaomi ? View.VISIBLE : View.GONE);
+    }
+
+    private void renderHistory(JSONArray history) {
+        historyList.removeAllViews();
+        historyCard.setVisibility(history.length() > 1 ? View.VISIBLE : View.GONE);
+        LayoutInflater inflater = getLayoutInflater();
+        DateFormat time = DateFormat.getTimeInstance(DateFormat.SHORT);
+        for (int i = 1; i < history.length(); i++) {
+            JSONObject item = history.optJSONObject(i);
+            if (item == null) continue;
+            String text = item.optString("text");
+            long at = item.optLong("at");
+            View row = inflater.inflate(R.layout.item_crossing, historyList, false);
+            String when = DateUtils.isToday(at) ? time.format(new Date(at))
+                    : DateUtils.formatDateTime(this, at, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH);
+            ((TextView) row.findViewById(R.id.itemMeta)).setText(item.optString("dir") + "  ·  " + when);
+            ((TextView) row.findViewById(R.id.itemText)).setText(Ferry.preview(text));
+            row.setContentDescription("Copy again: " + Ferry.preview(text));
+            row.setOnClickListener(v -> copyAgain(text));
+            historyList.addView(row);
+        }
+    }
+
+    private void copyAgain(String text) {
+        Ferry.prefs(this).edit().putString("last_text", text).apply();   // so automatic sending does not send it back
+        getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("Ferry", text));
+        if (Build.VERSION.SDK_INT < 33) Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();   // Android 13+ shows its own
     }
 
     private void stylePrimary(Button b) {

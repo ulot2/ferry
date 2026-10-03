@@ -15,11 +15,14 @@ import java.io.IOException;
  * which is why this has to be an activity and not a background job.
  */
 public class SendActivity extends Activity {
-    private boolean started;
+    /** Set by AutoSendService after a tap on Copy. Stays quiet when there is nothing new to send. */
+    static final String EXTRA_AUTO = "auto";
+    private boolean started, auto;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        auto = getIntent().getBooleanExtra(EXTRA_AUTO, false);
         CharSequence text = getIntent().getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
         if (text == null) text = getIntent().getCharSequenceExtra(Intent.EXTRA_TEXT);
         if (text != null) send(text.toString());
@@ -32,24 +35,33 @@ public class SendActivity extends Activity {
         ClipData clip = getSystemService(ClipboardManager.class).getPrimaryClip();
         CharSequence text = clip == null || clip.getItemCount() == 0 ? null : clip.getItemAt(0).coerceToText(this);
         if (text == null || text.length() == 0) {
-            done("Clipboard is empty");
+            done(auto ? null : "Clipboard is empty");
+            return;
+        }
+        if (auto && text.toString().equals(Ferry.lastText(this))) {
+            done(null);   // already crossed (for example, it came from the laptop)
             return;
         }
         send(text.toString());
     }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+        overridePendingTransition(0, 0);   // no flash when this invisible screen closes
+    }
+
     private void send(String text) {
         started = true;
-        String topic = Ferry.topic(this);
-        if (topic.isEmpty()) {
-            done("Open Ferry and set your topic first");
+        if (!Ferry.paired(this)) {
+            done("Open Ferry and pair it with your laptop first");
             return;
         }
         new Thread(() -> {
             String result;
             try {
-                Ferry.send(topic, text, "phone");
-                Ferry.crossed(this, "Phone → Laptop", text);
+                Ferry.send(this, text, "phone");
+                Ferry.crossed(this, Ferry.TO_LAPTOP, text, System.currentTimeMillis());
                 result = "Sent to laptop";
             } catch (IOException e) {
                 result = "Not sent. Ferry could not reach ntfy.sh. Try again when you are online.";
@@ -61,7 +73,7 @@ public class SendActivity extends Activity {
 
     private void done(String message) {
         started = true;
-        Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
+        if (message != null) Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
         finish();
     }
 }

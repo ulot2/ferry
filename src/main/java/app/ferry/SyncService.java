@@ -27,7 +27,7 @@ import java.nio.charset.StandardCharsets;
 
 /** Keeps a connection to ntfy.sh open and puts whatever the laptop copies into this phone's clipboard. */
 public class SyncService extends Service {
-    private static final String CHANNEL = "sync";
+    private static final String CHANNEL = "sync", CROSSINGS = "crossings";
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile boolean running;
     private volatile HttpURLConnection con;
@@ -66,21 +66,35 @@ public class SyncService extends Service {
     }
 
     private void loop() {
-        String topic = Ferry.topic(this);
+        String code = Ferry.code(this);
+        if (code.isEmpty()) {
+            stopSelf();   // not paired (or paired before encryption): nothing to listen to
+            return;
+        }
+        String topic = Crypto.topic(code);
         while (running) {
             try {
-                con = (HttpURLConnection) new URL(Ferry.SERVER + topic + "/json").openConnection();
+                // "since" replays what arrived while we were away, so a short disconnection loses nothing.
+                String since = Ferry.prefs(this).getString("last_id", "");
+                con = (HttpURLConnection) new URL(Ferry.SERVER + topic + "/json" + (since.isEmpty() ? "" : "?since=" + since)).openConnection();
                 con.setConnectTimeout(15_000);
                 con.setReadTimeout(90_000);   // ntfy.sh sends a keepalive every 45 s; silence means the link is dead
                 BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8));
                 state(Ferry.STATUS_CONNECTED, "Connected");
                 for (String line; (line = in.readLine()) != null; ) {
                     JSONObject m = new JSONObject(line);
-                    if (!"message".equals(m.optString("event")) || hasTag(m, "phone")) continue;
-                    String text = m.has("attachment") ? fetchText(m.getJSONObject("attachment")) : m.optString("message");
-                    if (text != null && !text.isEmpty()) {
+                    if (!"message".equals(m.optString("event"))) continue;
+                    Ferry.prefs(this).edit().putString("last_id", m.optString("id")).apply();
+                    if (hasTag(m, "phone")) continue;   // our own message coming back
+                    String sealed = m.has("attachment") ? fetchText(m.getJSONObject("attachment")) : m.optString("message");
+                    String text = Crypto.open(code, sealed);   // null: not from our laptop, ignore it
+                    if (text == null || text.isEmpty()) continue;
+                    long at = m.optLong("time", System.currentTimeMillis() / 1000) * 1000;
+                    Ferry.crossed(this, Ferry.TO_PHONE, text, at);
+                    // A copy that waited more than 10 minutes goes to history only; it must not replace what you copied since.
+                    if (System.currentTimeMillis() - at < 10 * 60_000) {
                         setClipboard(text);
-                        Ferry.crossed(this, "Laptop → Phone", text);
+                        announce(text);
                     }
                 }
             } catch (Exception e) {
@@ -116,6 +130,24 @@ public class SyncService extends Service {
 
     private void setClipboard(String text) {
         main.post(() -> getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("Ferry", text)));
+    }
+
+    /** A short pop-up (no sound) saying what just landed in the clipboard. It clears itself after 8 seconds. */
+    private void announce(String text) {
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        NotificationChannel ch = new NotificationChannel(CROSSINGS, "Copies from your laptop", NotificationManager.IMPORTANCE_HIGH);
+        ch.setSound(null, null);
+        ch.enableVibration(false);
+        nm.createNotificationChannel(ch);
+        String peer = Ferry.prefs(this).getString("peer", "");
+        nm.notify(2, new Notification.Builder(this, CROSSINGS)
+                .setSmallIcon(R.drawable.ic_tile)
+                .setContentTitle("Copied from " + (peer.isEmpty() ? "your laptop" : peer))
+                .setContentText(Ferry.preview(text))
+                .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE))
+                .setAutoCancel(true)
+                .setTimeoutAfter(8_000)
+                .build());
     }
 
     private void state(String status, String label) {
