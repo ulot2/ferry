@@ -212,6 +212,7 @@ sealed class PillButton : Button
     }
 
     /// <summary>For chips: filled when on. Screen readers hear "on" or "off".</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]   // set in code, never by the form designer
     public bool On
     {
         get => on;
