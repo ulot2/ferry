@@ -241,10 +241,23 @@ public class SyncService extends Service {
     /** A short pop-up (no sound) saying what just landed in the clipboard. It clears itself after 8 seconds. */
     private void announce(String text) {
         String peer = Ferry.prefs(this).getString("peer", "");
-        notifyCrossing("Copied from " + (peer.isEmpty() ? "your laptop" : peer), Ferry.preview(text), null);
+        String from = peer.isEmpty() ? "your laptop" : peer;
+        Uri link = Ferry.link(text);
+        if (link != null) {
+            // A copied link: tapping the notification (or Open link) opens it in the browser.
+            PendingIntent open = PendingIntent.getActivity(this, 3, new Intent(Intent.ACTION_VIEW, link)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE);
+            notifyCrossing("Link from " + from, link.toString(), null, open);
+        } else {
+            notifyCrossing("Copied from " + from, Ferry.preview(text), null);
+        }
     }
 
     private void notifyCrossing(String title, String text, Bitmap picture) {
+        notifyCrossing(title, text, picture, null);
+    }
+
+    private void notifyCrossing(String title, String text, Bitmap picture, PendingIntent openLink) {
         NotificationManager nm = getSystemService(NotificationManager.class);
         NotificationChannel ch = new NotificationChannel(CROSSINGS, "Crossings", NotificationManager.IMPORTANCE_HIGH);
         ch.setSound(null, null);
@@ -258,6 +271,9 @@ public class SyncService extends Service {
                 .setAutoCancel(true)
                 .setTimeoutAfter(8_000);
         if (picture != null) b.setLargeIcon(picture).setStyle(new Notification.BigPictureStyle().bigPicture(picture));
+        if (openLink != null) {
+            b.setContentIntent(openLink).addAction(new Notification.Action.Builder(null, "Open link", openLink).build());
+        }
         nm.notify(2, b.build());
     }
 

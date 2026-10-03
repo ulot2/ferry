@@ -212,6 +212,7 @@ sealed class TrayApp : ApplicationContext
             // Password managers mark their copies with these formats. Never send those.
             if (Clipboard.ContainsData("ExcludeClipboardContentFromMonitorProcessing")
                 || Clipboard.ContainsData("Clipboard Viewer Ignore")
+                || OptedOut("CanUploadToCloudClipboard")   // apps set it to 0 for "never send this to other devices"
                 || Clipboard.ContainsData(ImageClip.Marker)) return;   // the marker: an image Ferry itself put there
             if (Clipboard.ContainsText()) text = Clipboard.GetText();   // text wins when an app copies both
             else if (Settings.Images && Clipboard.ContainsImage()) (text, image) = ("", ImageClip.FromClipboard());
@@ -241,8 +242,22 @@ sealed class TrayApp : ApplicationContext
         }
     }
 
-    void Apply(string text, DateTime at)
+    /// <summary>The text as a web link, when the whole copy is one http(s) address; otherwise null.</summary>
+    public static Uri? Link(string text)
     {
+        string s = text.Trim();
+        return s.Length < 2048 && !s.Any(char.IsWhiteSpace) && Uri.TryCreate(s, UriKind.Absolute, out var u)
+            && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp) ? u : null;
+    }
+
+    /// <summary>Opens a link in the default browser. Only http(s), checked by Link(), so a copy can never start a program.</summary>
+    static void OpenLink(Uri url) =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true });
+
+    /// <summary>True when the copying app set this Windows clipboard flag to 0 (a 4-byte number), meaning "do not share".</summary>    static bool OptedOut(string format) =>
+        Clipboard.GetData(format) is MemoryStream flag && flag.Length >= 4 && BitConverter.ToInt32(flag.ToArray(), 0) == 0;
+
+    void Apply(string text, DateTime at)    {
         Crossed("Phone → Laptop", text, at);
         // A copy that waited more than 10 minutes (laptop asleep or off) goes to history only.
         // It must not replace what you copied since.
@@ -256,7 +271,11 @@ sealed class TrayApp : ApplicationContext
         {
             return;
         }
-        if (Settings.Popups) Popup("Copied from " + (Settings.Peer == "" ? "your phone" : Settings.Peer), Preview(text), ToolTipIcon.None, ShowWindow);
+string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
+        if (!Settings.Popups) return;
+        // A copied link gets a pop-up that opens it; anything else just says what arrived.
+        if (Link(text) is { } url) Popup("Link from " + from, url.AbsoluteUri + "\nClick to open it.", ToolTipIcon.None, () => OpenLink(url));
+        else Popup("Copied from " + from, Preview(text), ToolTipIcon.None, ShowWindow);
     }
 
     async Task SendImage(byte[] image)

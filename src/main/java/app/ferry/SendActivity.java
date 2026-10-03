@@ -6,6 +6,7 @@ import android.content.ClipboardManager;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.PersistableBundle;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -45,6 +46,14 @@ public class SendActivity extends Activity {
         if (clip == null || clip.getItemCount() == 0) {
             Log.i("Ferry", "send screen: clipboard empty or unreadable");
             done(auto ? null : "Clipboard is empty");
+            return;
+        }
+        // Password managers mark their copies as sensitive (Android 13+). Automatic sending never sends those;
+        // tapping Send yourself still does, because then you chose to.
+        PersistableBundle extras = clip.getDescription().getExtras();
+        if (auto && extras != null && extras.getBoolean("android.content.extra.IS_SENSITIVE")) {   // ClipDescription.EXTRA_IS_SENSITIVE
+            Log.i("Ferry", "send screen: marked sensitive (password), not sent");
+            done(null);
             return;
         }
         Uri uri = clip.getItemAt(0).getUri();

@@ -22,6 +22,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.util.Locale;
 
 /** Shared bits: saved state, pairing, history, and talking to ntfy.sh. */
 final class Ferry {
@@ -133,8 +134,16 @@ final class Ferry {
         prefs(c).edit().remove("history").apply();
     }
 
-    /** Short single-line preview of a crossing. */
-    static String preview(String text) {
+    /** The text as a web link, when the whole copy is one http(s) address; otherwise null. Only http(s), so a copy never opens anything else. */
+    static Uri link(String text) {
+        String s = text.trim();
+        if (s.isEmpty() || s.length() >= 2048 || s.matches(".*\\s.*")) return null;
+        Uri u = Uri.parse(s);
+        String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
+        return (scheme.equals("https") || scheme.equals("http")) && u.getHost() != null && !u.getHost().isEmpty() ? u : null;
+    }
+
+    /** Short single-line preview of a crossing. */    static String preview(String text) {
         String p = text.trim().replaceAll("\\s+", " ");
         return p.length() > 160 ? p.substring(0, 160) + "…" : p;
     }
