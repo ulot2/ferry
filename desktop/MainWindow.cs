@@ -54,6 +54,7 @@ sealed class MainWindow : Form
         {
             Bounds = new Rectangle(24, 560, 236, 22),
             ReadOnly = true,
+            TabStop = false,   // otherwise it takes focus on open and shows as selected; Copy code is the keyboard path
             BorderStyle = BorderStyle.None,
             BackColor = Harbor.Ground,
             ForeColor = Harbor.Ink,
