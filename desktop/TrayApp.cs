@@ -254,10 +254,12 @@ sealed class TrayApp : ApplicationContext
     static void OpenLink(Uri url) =>
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true });
 
-    /// <summary>True when the copying app set this Windows clipboard flag to 0 (a 4-byte number), meaning "do not share".</summary>    static bool OptedOut(string format) =>
+    /// <summary>True when the copying app set this Windows clipboard flag to 0 (a 4-byte number), meaning "do not share".</summary>
+    static bool OptedOut(string format) =>
         Clipboard.GetData(format) is MemoryStream flag && flag.Length >= 4 && BitConverter.ToInt32(flag.ToArray(), 0) == 0;
 
-    void Apply(string text, DateTime at)    {
+    void Apply(string text, DateTime at)
+    {
         Crossed("Phone → Laptop", text, at);
         // A copy that waited more than 10 minutes (laptop asleep or off) goes to history only.
         // It must not replace what you copied since.
