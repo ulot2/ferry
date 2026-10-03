@@ -27,7 +27,9 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             v="${GITHUB_REF_NAME#v}"
           else
-            last=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || echo v0.0.0)
+            # The highest release tag in the repo, even when it sits on a main merge commit that dev does not contain.
+            last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+            last="${last:-v0.0.0}"
             v="${last#v}-dev.${GITHUB_RUN_NUMBER}"
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"

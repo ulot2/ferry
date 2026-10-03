@@ -266,6 +266,8 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
 
         boolean autoEdition = Ferry.autoEdition(this);
         String update = p.getString("update_version", "");
+        // The saved result may predate an install (for example Ferry Auto over Ferry), so check it against this version.
+        if (!update.isEmpty() && !Updates.newer(update, Updates.installed(this))) update = "";
         updateCard.setVisibility(update.isEmpty() ? View.GONE : View.VISIBLE);
         updateTitle.setText((autoEdition ? "Ferry Auto " : "Ferry ") + update + " is ready");
         updateBody.setText(autoEdition
