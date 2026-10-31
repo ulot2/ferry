@@ -119,7 +119,13 @@ final class Ferry {
         }
         SharedPreferences.Editor e = prefs(c).edit().putString("history", now.toString());
         if (image == null) e.putString("last_text", text);   // only text can bounce back through automatic sending
+        if (at >= prefs(c).getLong("pending_at", Long.MAX_VALUE)) e.remove("pending").remove("pending_at");   // a newer crossing replaces the text that waits
         e.apply();
+    }
+
+    /** Keeps a text that could not be sent. SyncService sends it when the link is back. */
+    static void keepForLater(Context c, String text) {
+        prefs(c).edit().putString("pending", text).putLong("pending_at", System.currentTimeMillis()).apply();
     }
 
     static JSONArray history(Context c) {

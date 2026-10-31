@@ -102,7 +102,8 @@ public class SendActivity extends Activity {
                 Log.i("Ferry", "send screen: sent");
             } catch (IOException e) {
                 Log.w("Ferry", "send screen: not sent: " + e);
-                result = "Not sent. Ferry could not reach ntfy.sh. Try again when you are online.";
+                Ferry.keepForLater(this, text);
+                result = "Not sent yet. Ferry could not reach ntfy.sh. It sends the text when the link is back.";
             }
             String r = result;
             runOnUiThread(() -> done(r));

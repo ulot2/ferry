@@ -86,7 +86,7 @@ Under the chart, the newest crossing shows in large text. The earlier ones are i
 The pill in the top-right corner of the chart shows the connection:
 
 - **Steady link** (green dot): connected.
-- **Adrift** (red dot): offline. Ferry tries again every 5 seconds.
+- **Adrift** (red dot): offline. Ferry tries again every 5 seconds. When the device changes network or wakes from sleep, Ferry connects again at once.
 - **Connecting**, **Paused** or **Not paired** (grey dot).
 
 The switches are chips under the logbook: a filled chip is on, an outlined chip is off.
@@ -189,7 +189,7 @@ Your pairing and history stay after an update.
 
 **The phone says "Pair again".** This version encrypts the text, so phones paired with an older version must pair again. Update Ferry on the laptop, then scan the new QR code.
 
-**The phone says "Not sent".** The phone could not reach ntfy.sh. Copy the text again when the phone is online.
+**The phone or the laptop says "Not sent yet".** The device could not reach ntfy.sh. Ferry keeps the text and sends it by itself when the link is back. If the link is not back within 10 minutes, Ferry drops the text. Then copy it again. Images do not wait: copy an image again when the device is online.
 
 ## Build and release
 

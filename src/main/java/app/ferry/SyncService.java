@@ -3,11 +3,14 @@ package app.ferry;
 import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentUris;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.ContentObserver;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -49,6 +52,9 @@ public class SyncService extends Service {
     private volatile String label = "Connecting…";
     private ContentObserver screenshots;
     private long lastScreenshot;   // MediaStore id of the last screenshot sent
+    private ConnectivityManager.NetworkCallback netWatch;
+    private Network network;
+    private volatile boolean skipWait;   // a reconnect on purpose: no 5 s wait, no "Offline" in the notification
 
     static void start(Context c) {
         c.startForegroundService(new Intent(c, SyncService.class));
@@ -65,6 +71,7 @@ public class SyncService extends Service {
             worker = new Thread(this::loop, "ferry-sync");
             worker.start();
             watchScreenshots();
+            watchNetwork();
         }
         return START_STICKY;
     }
@@ -74,6 +81,7 @@ public class SyncService extends Service {
         running = false;
         Ferry.status(this, Ferry.STATUS_OFFLINE);
         if (screenshots != null) getContentResolver().unregisterContentObserver(screenshots);
+        if (netWatch != null) getSystemService(ConnectivityManager.class).unregisterNetworkCallback(netWatch);
         HttpURLConnection c = con;
         if (c != null) c.disconnect();   // unblocks the read in loop()
     }
@@ -99,6 +107,7 @@ public class SyncService extends Service {
                 con.setReadTimeout(90_000);   // ntfy.sh sends a keepalive every 45 s; silence means the link is dead
                 BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8));
                 state(Ferry.STATUS_CONNECTED, "Connected");
+                new Thread(this::sendPending).start();
                 for (String line; (line = in.readLine()) != null; ) {
                     JSONObject m = new JSONObject(line);
                     if (!"message".equals(m.optString("event"))) continue;
@@ -121,14 +130,52 @@ public class SyncService extends Service {
                 }
             } catch (Exception e) {
                 // ponytail: fixed 5 s retry; add backoff if it drains battery while offline
-                if (running) {
+                if (running && !skipWait) {
                     state(Ferry.STATUS_OFFLINE, "Offline, retrying");
                     SystemClock.sleep(5_000);
                 }
+                skipWait = false;
             } finally {
                 HttpURLConnection c = con;
                 if (c != null) c.disconnect();
             }
+        }
+    }
+
+    /**
+     * After the phone changes network (Wi-Fi to mobile data, or Wi-Fi back), the old stream is dead,
+     * and the read timeout needs up to 90 s to notice. Drop it at once, so loop() connects again.
+     */
+    private void watchNetwork() {
+        netWatch = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network n) {
+                // Android calls this once for the current network, then for each new one.
+                if (network != null && !network.equals(n)) {
+                    skipWait = true;
+                    HttpURLConnection c = con;
+                    if (c != null) c.disconnect();   // unblocks the read in loop()
+                }
+                network = n;
+            }
+        };
+        getSystemService(ConnectivityManager.class).registerDefaultNetworkCallback(netWatch);
+    }
+
+    /** Sends the text that SendActivity could not send. A text older than 10 minutes is dropped, the same rule as for arrivals. */
+    private synchronized void sendPending() {
+        SharedPreferences p = Ferry.prefs(this);
+        String text = p.getString("pending", null);
+        if (text == null) return;
+        if (System.currentTimeMillis() - p.getLong("pending_at", 0) > 10 * 60_000) {
+            p.edit().remove("pending").remove("pending_at").apply();
+            return;
+        }
+        try {
+            Ferry.send(this, text, "phone");
+            Ferry.crossed(this, Ferry.TO_LAPTOP, text, System.currentTimeMillis());   // this also clears "pending"
+        } catch (IOException e) {
+            Log.w("Ferry", "waiting text not sent: " + e);   // still offline: try again on the next connection
         }
     }
 

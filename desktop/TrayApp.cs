@@ -1,3 +1,4 @@
+using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
@@ -25,6 +26,8 @@ sealed class TrayApp : ApplicationContext
     MainWindow? window;
     string? last;   // text we last sent or applied, so our own clipboard changes do not echo back
     string? lastImage;   // hash of the image we last sent, so one copy is not sent twice
+    string? pending;   // a copy that could not be sent; it goes when the link is back
+    DateTime pendingAt;
     (string Version, string Url)? update;
     Action balloonClick = () => { };
 
@@ -75,12 +78,15 @@ sealed class TrayApp : ApplicationContext
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
         tray.BalloonTipClicked += (_, _) => balloonClick();
 
-        sync.StateChanged += s => ui.Post(_ => { State = s; Changed(); }, null);
+        sync.StateChanged += s => ui.Post(_ => { State = s; Changed(); if (s == LinkState.Connected) SendPending(); }, null);
         sync.TextReceived += (t, at) => ui.Post(_ => Apply(t, at), null);
         sync.ImageReceived += (image, at) => ui.Post(_ => ApplyImage(image, at), null);
         sync.PhonePaired += name => ui.Post(_ => Paired(name), null);
         sync.MessageSeen += id => ui.Post(_ => { Settings.LastId = id; Settings.Save(); }, null);
         watcher.ClipboardChanged += OnClipboardChanged;
+        // After a network change or sleep the old stream is dead, and Sync needs up to 90 s to notice. Reconnect at once.
+        NetworkChange.NetworkAddressChanged += OnNetworkChanged;
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
         showWait = ThreadPool.RegisterWaitForSingleObject(show, (_, _) => ui.Post(_ => ShowWindow(), null), null, -1, false);
         updateTimer.Tick += async (_, _) => await CheckForUpdate();
         updateTimer.Start();
@@ -238,9 +244,37 @@ sealed class TrayApp : ApplicationContext
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
             last = null;
-            Popup("Not sent", "Ferry could not reach ntfy.sh. Copy the text again when you are online.", ToolTipIcon.Warning, ShowWindow);
+            (pending, pendingAt) = (text, DateTime.Now);
+            Popup("Not sent yet", "Ferry could not reach ntfy.sh. It sends the text when the link is back.", ToolTipIcon.Warning, ShowWindow);
         }
     }
+
+    /// <summary>Sends the copy that failed earlier. A copy older than 10 minutes is dropped, the same rule as for arrivals.</summary>
+    async void SendPending()
+    {
+        if (pending is not { } text || Settings.Paused) return;
+        pending = null;   // taken, so a second reconnect does not send it twice
+        if (DateTime.Now - pendingAt > TimeSpan.FromMinutes(10)) return;
+        try
+        {
+            await Sync.Send(Settings.Code, text);
+            Crossed("Laptop → Phone", text, DateTime.Now);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            pending ??= text;   // still offline: try again on the next connection, unless a newer copy is waiting
+        }
+    }
+
+    void OnNetworkChanged(object? sender, EventArgs e) => ui.Post(_ => Reconnect(), null);
+
+    void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == PowerModes.Resume) ui.Post(_ => Reconnect(), null);
+    }
+
+    /// <summary>Opens a new stream. "since" replays what arrived meanwhile, so nothing is lost.</summary>
+    void Reconnect() => sync.Start(Settings.Code, Settings.LastId);
 
     /// <summary>The text as a web link, when the whole copy is one http(s) address; otherwise null.</summary>
     public static Uri? Link(string text)
@@ -378,6 +412,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     {
         if (text.Length <= HistoryMaxChars) Settings.History.Insert(0, new Crossing(direction, text, at, imagePath));
         if (Settings.History.Count > HistorySize) Settings.History.RemoveRange(HistorySize, Settings.History.Count - HistorySize);
+        if (at >= pendingAt) pending = null;   // a newer crossing replaces the copy that waits
         Settings.Save();
         Changed();
     }
@@ -422,6 +457,8 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     {
         tray.Visible = false;
         updateTimer.Stop();
+        NetworkChange.NetworkAddressChanged -= OnNetworkChanged;
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         sync.Stop();
         watcher.Dispose();
         window?.Dispose();
