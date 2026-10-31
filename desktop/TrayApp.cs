@@ -413,7 +413,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         {
             Popup("File not sent", $"Ferry could not read {name}. Another program can be using it.", ToolTipIcon.Warning, ShowWindow);
         }
-        catch (HttpRequestException { StatusCode: HttpStatusCode.RequestEntityTooLarge or HttpStatusCode.TooManyRequests })
+        catch (HttpRequestException e) when (e.StatusCode is HttpStatusCode.RequestEntityTooLarge or HttpStatusCode.TooManyRequests)
         {
             Popup("File not sent", "ntfy.sh refused the file. It keeps at most 100 MB of your files at a time, for 3 hours. Try again later.", ToolTipIcon.Warning, ShowWindow);
         }
