@@ -1,3 +1,5 @@
+using System.IO.Pipes;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -10,6 +12,7 @@ sealed class TrayApp : ApplicationContext
 {
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const int HistorySize = 10, HistoryMaxChars = 100_000;
+    static readonly string PipeName = "Ferry.Send." + Environment.UserName;   // Send to > Ferry hands files over this pipe
     readonly WindowsFormsSynchronizationContext ui = new();
     readonly Sync sync = new();
     readonly NotifyIcon tray = new();
@@ -35,7 +38,7 @@ sealed class TrayApp : ApplicationContext
     public LinkState State { get; private set; } = LinkState.Connecting;
     public Crossing? LastCrossing => Settings.History.FirstOrDefault();
 
-    public TrayApp(EventWaitHandle show)
+    public TrayApp(EventWaitHandle show, string[] files)
     {
         this.show = show;
         SynchronizationContext.SetSynchronizationContext(ui);
@@ -51,7 +54,7 @@ sealed class TrayApp : ApplicationContext
             Settings.Save();
         }
         if (firstRun) StartWithWindows = true;
-        StartMenuShortcut();
+        Shortcuts();
 
         pauseItem.Checked = Settings.Paused;
         pauseItem.CheckedChanged += (_, _) => Paused = pauseItem.Checked;
@@ -66,6 +69,7 @@ sealed class TrayApp : ApplicationContext
         var menu = new ContextMenuStrip();
         menu.Items.Add(statusItem);
         menu.Items.Add(new ToolStripMenuItem("Open Ferry", null, (_, _) => ShowWindow()) { Font = new Font(menu.Font, FontStyle.Bold) });
+        menu.Items.Add("Send a file to the phone…", null, (_, _) => PickFiles());
         menu.Items.Add(updateItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(pauseItem);
@@ -81,6 +85,7 @@ sealed class TrayApp : ApplicationContext
         sync.StateChanged += s => ui.Post(_ => { State = s; Changed(); if (s == LinkState.Connected) SendPending(); }, null);
         sync.TextReceived += (t, at) => ui.Post(_ => Apply(t, at), null);
         sync.ImageReceived += (image, at) => ui.Post(_ => ApplyImage(image, at), null);
+        sync.FileReceived += (name, contents, at) => ui.Post(_ => ApplyFile(name, contents, at), null);
         sync.PhonePaired += name => ui.Post(_ => Paired(name), null);
         sync.MessageSeen += id => ui.Post(_ => { Settings.LastId = id; Settings.Save(); }, null);
         watcher.ClipboardChanged += OnClipboardChanged;
@@ -96,6 +101,8 @@ sealed class TrayApp : ApplicationContext
         sync.Start(Settings.Code, Settings.LastId);
         if (Settings.Peer == "") ShowWindow();   // not paired yet: show the QR code
         _ = CheckForUpdate();
+        _ = ListenForFiles();
+        if (files.Length > 0) _ = SendFiles(files);   // Send to > Ferry while Ferry was not running
     }
 
     public string StatusLabel => Settings.Paused ? "Paused" : State switch
@@ -163,18 +170,23 @@ sealed class TrayApp : ApplicationContext
     }
 
     /// <summary>
-    /// Keeps a "Ferry" entry in the Start menu, so Ferry can be opened again after Quit.
-    /// Written on every start, so it follows Ferry.exe if the file moves.
+    /// Keeps a "Ferry" entry in the Start menu, so Ferry can be opened again after Quit, and a
+    /// "Ferry (phone)" entry in the Send to menu of File Explorer. Written on every start, so they follow Ferry.exe if the file moves.
     /// </summary>
-    static void StartMenuShortcut()
+    static void Shortcuts()
     {
-        string link = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Ferry.lnk");
+        Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Ferry.lnk"), "Ferry: clipboard between this laptop and your phone");
+        Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SendTo), "Ferry (phone).lnk"), "Send the file to your phone with Ferry");
+    }
+
+    static void Shortcut(string link, string description)
+    {
         try
         {
             dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
             dynamic shortcut = shell.CreateShortcut(link);
             shortcut.TargetPath = Environment.ProcessPath;
-            shortcut.Description = "Ferry: clipboard between this laptop and your phone";
+            shortcut.Description = description;
             shortcut.Save();
         }
         catch (Exception)
@@ -368,6 +380,153 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     /// <summary>Puts a saved image back on the clipboard without sending it to the phone.</summary>
     public void CopyImageQuietly(string path) => ImageClip.ToClipboard(File.ReadAllBytes(path));
 
+    /// <summary>Puts a file on the clipboard, to paste in a folder or an email. Ferry never sends a copied file.</summary>
+    public static void CopyFileQuietly(string path) => Clipboard.SetFileDropList(new System.Collections.Specialized.StringCollection { path });
+
+    /// <summary>Sends files the user chose: Send to, drag and drop, or the tray menu. Copying a file never sends it.</summary>
+    public async Task SendFiles(IEnumerable<string> paths)
+    {
+        foreach (string path in paths) await SendFile(path);
+    }
+
+    async Task SendFile(string path)
+    {
+        string name = Path.GetFileName(path);
+        var info = new FileInfo(path);
+        if (!info.Exists)
+        {
+            Popup("File not sent", $"{name} is a folder, or it is gone. Ferry sends files only.", ToolTipIcon.Warning, ShowWindow);
+            return;
+        }
+        if (info.Length > Sync.MaxFileBytes)
+        {
+            Popup("File not sent", $"{name} is over 14 MB. Ferry cannot send files that large yet.", ToolTipIcon.Warning, ShowWindow);
+            return;
+        }
+        try
+        {
+            await Sync.SendFile(Settings.Code, name, await File.ReadAllBytesAsync(path));
+            Crossed("Laptop → Phone", name, DateTime.Now, filePath: path);
+            if (Settings.Popups) Popup("Sent to " + (Settings.Peer == "" ? "your phone" : Settings.Peer), name + "\nIn Downloads/Ferry on the phone.", ToolTipIcon.None, ShowWindow);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Popup("File not sent", $"Ferry could not read {name}. Another program can be using it.", ToolTipIcon.Warning, ShowWindow);
+        }
+        catch (HttpRequestException { StatusCode: HttpStatusCode.RequestEntityTooLarge or HttpStatusCode.TooManyRequests })
+        {
+            Popup("File not sent", "ntfy.sh refused the file. It keeps at most 100 MB of your files at a time, for 3 hours. Try again later.", ToolTipIcon.Warning, ShowWindow);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            Popup("File not sent", "Ferry could not reach ntfy.sh. Send the file again when you are online.", ToolTipIcon.Warning, ShowWindow);
+        }
+    }
+
+    async void PickFiles()
+    {
+        using var dialog = new OpenFileDialog { Title = "Send to the phone", Multiselect = true };
+        if (dialog.ShowDialog() == DialogResult.OK) await SendFiles(dialog.FileNames);
+    }
+
+    /// <summary>Receives file paths from a second Ferry.exe that Send to > Ferry started. Only this Windows user can connect.</summary>
+    async Task ListenForFiles()
+    {
+        while (true)
+        {
+            var paths = new List<string>();
+            try
+            {
+                using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                await pipe.WaitForConnectionAsync();
+                using var reader = new StreamReader(pipe);
+                while (await reader.ReadLineAsync() is { } line) paths.Add(line);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                await Task.Delay(1000);   // the other end closed early, or the pipe is busy: wait for the next one
+                continue;
+            }
+            _ = SendFiles(paths);   // not awaited, so the next Send to is not kept waiting
+        }
+    }
+
+    /// <summary>Gives file paths to the Ferry that is already running. A second Ferry.exe, started by Send to > Ferry, calls this.</summary>
+    public static void HandOver(string[] paths)
+    {
+        try
+        {
+            using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.Out, PipeOptions.CurrentUserOnly);
+            pipe.Connect(5000);
+            using var writer = new StreamWriter(pipe);
+            foreach (string p in paths) writer.WriteLine(Path.GetFullPath(p));
+        }
+        catch (Exception e) when (e is TimeoutException or IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show("Ferry could not take the file. Quit Ferry from the tray, open it again, and then send the file again.", "Ferry", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    void ApplyFile(string name, byte[] contents, DateTime at)
+    {
+        string path;
+        try
+        {
+            path = SaveDownload(name, contents);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Popup("File not saved", $"Ferry could not save {name} in Downloads\\Ferry.", ToolTipIcon.Warning, ShowWindow);
+            return;
+        }
+        Crossed("Phone → Laptop", Path.GetFileName(path), at, filePath: path);
+        if (Settings.Popups && !Settings.Paused && DateTime.Now - at < TimeSpan.FromMinutes(10))
+            Popup("File from " + (Settings.Peer == "" ? "your phone" : Settings.Peer), Path.GetFileName(path) + "\nIn Downloads\\Ferry. Click to show it.",
+                ToolTipIcon.None, () => ShowInFolder(path));
+    }
+
+    /// <summary>Saves a file from the phone in Downloads\Ferry. It never overwrites: a second "a.pdf" becomes "a (2).pdf".</summary>
+    static string SaveDownload(string name, byte[] contents)
+    {
+        string dir = Path.Combine(DownloadsFolder(), "Ferry");
+        Directory.CreateDirectory(dir);
+        string safe = SafeName(name), path = Path.Combine(dir, safe);
+        for (int i = 2; File.Exists(path); i++) path = Path.Combine(dir, $"{Path.GetFileNameWithoutExtension(safe)} ({i}){Path.GetExtension(safe)}");
+        File.WriteAllBytes(path, contents);
+        // Mark the file as from the internet, as a browser does, so Windows warns before it runs a program or a macro in it.
+        try
+        {
+            File.WriteAllText(path + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // A drive without NTFS cannot keep the mark. The file is still saved.
+        }
+        return path;
+    }
+
+    /// <summary>The name from the phone, made safe for Windows: no folder parts, no forbidden characters, no device names.</summary>
+    static string SafeName(string name)
+    {
+        var bad = Path.GetInvalidFileNameChars();
+        string s = new string(Path.GetFileName(name).Select(ch => bad.Contains(ch) ? '_' : ch).ToArray()).Trim().TrimEnd('.');
+        if (Regex.IsMatch(s, @"^(CON|PRN|AUX|NUL|COM\d|LPT\d)(\..*)?$", RegexOptions.IgnoreCase)) s = "_" + s;
+        return s == "" ? "file" : s;
+    }
+
+    static string DownloadsFolder() =>
+        SHGetKnownFolderPath(new Guid("374DE290-123F-4565-9164-39C4925E467B"), 0, IntPtr.Zero, out string path) == 0
+            ? path : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid id, uint flags, IntPtr token, out string path);
+
+    /// <summary>Opens File Explorer with the file selected. It never opens the file itself.</summary>
+    public static void ShowInFolder(string path)
+    {
+        if (File.Exists(path)) System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
+    }
+
     static void Open(string path)
     {
         if (path != "" && File.Exists(path)) System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
@@ -408,9 +567,9 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         Changed();
     }
 
-    void Crossed(string direction, string text, DateTime at, string? imagePath = null)
+    void Crossed(string direction, string text, DateTime at, string? imagePath = null, string? filePath = null)
     {
-        if (text.Length <= HistoryMaxChars) Settings.History.Insert(0, new Crossing(direction, text, at, imagePath));
+        if (text.Length <= HistoryMaxChars) Settings.History.Insert(0, new Crossing(direction, text, at, imagePath, filePath));
         if (Settings.History.Count > HistorySize) Settings.History.RemoveRange(HistorySize, Settings.History.Count - HistorySize);
         if (at >= pendingAt) pending = null;   // a newer crossing replaces the copy that waits
         Settings.Save();

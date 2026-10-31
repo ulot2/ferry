@@ -2,8 +2,11 @@ using System.Text.Json;
 
 namespace Ferry;
 
-/// <summary>One transfer. ImagePath is null for text; for an image it is the saved file, or "" when none was saved (sent images).</summary>
-record Crossing(string Direction, string Text, DateTime Time, string? ImagePath = null);
+/// <summary>
+/// One transfer. ImagePath is null for text; for an image it is the saved file, or "" when none was saved (sent images).
+/// FilePath is set for a file: the received copy in Downloads\Ferry, or the file that was sent. Text is then the file name.
+/// </summary>
+record Crossing(string Direction, string Text, DateTime Time, string? ImagePath = null, string? FilePath = null);
 
 /// <summary>Saved in %APPDATA%\Ferry\settings.json (only this Windows user can read it).</summary>
 sealed class Settings

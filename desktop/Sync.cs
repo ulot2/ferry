@@ -16,8 +16,12 @@ sealed class Sync
     public event Action<LinkState>? StateChanged;
     public event Action<string, DateTime>? TextReceived;
     public event Action<byte[], DateTime>? ImageReceived;
+    public event Action<string, byte[], DateTime>? FileReceived;
     public event Action<string>? PhonePaired;
     public event Action<string>? MessageSeen;   // message id, for catching up after a restart
+
+    /// <summary>ntfy.sh takes files up to 15 MB. The name and the encryption add a few hundred bytes.</summary>
+    public const int MaxFileBytes = 14 * 1024 * 1024;
 
     public void Start(string code, string since)
     {
@@ -84,17 +88,21 @@ sealed class Sync
         if (tags.Contains("laptop")) return id;   // our own message coming back
 
         var at = m.TryGetProperty("time", out var tm) ? DateTimeOffset.FromUnixTimeSeconds(tm.GetInt64()).LocalDateTime : DateTime.Now;
-        if (tags.Contains("image"))
+        if (tags.Contains("image") || tags.Contains("file"))
         {
-            // An image is a sealed file. Fetch it only from ntfy.sh and only up to 16 MB.
+            // An image or a file is a sealed attachment. Fetch it only from ntfy.sh and only up to 16 MB.
             if (!m.TryGetProperty("attachment", out var file)) return id;
             string fileUrl = file.TryGetProperty("url", out var fu) ? fu.GetString() ?? "" : "";
             long size = file.TryGetProperty("size", out var fs) ? fs.GetInt64() : 0;
             if (!fileUrl.StartsWith(Server + "/") || size > 16L * 1024 * 1024) return id;
             try
             {
-                byte[]? image = Crypto.OpenImage(code, await Http.GetByteArrayAsync(fileUrl, stop));
-                if (image is not null) ImageReceived?.Invoke(image, at);
+                byte[] sealedBytes = await Http.GetByteArrayAsync(fileUrl, stop);
+                if (tags.Contains("image"))
+                {
+                    if (Crypto.OpenImage(code, sealedBytes) is { } image) ImageReceived?.Invoke(image, at);
+                }
+                else if (Crypto.OpenFile(code, sealedBytes) is { } opened) FileReceived?.Invoke(opened.Name, opened.Contents, at);
             }
             catch (HttpRequestException)
             {
@@ -137,14 +145,19 @@ sealed class Sync
     }
 
     /// <summary>Encrypts and sends an image (PNG or JPEG bytes) to the phone as a file.</summary>
-    public static async Task SendImage(string code, byte[] image)
+    public static Task SendImage(string code, byte[] image) => Put(code, Crypto.SealImage(code, image), "image");
+
+    /// <summary>Encrypts and sends a file with its name. ntfy.sh only sees "file.ferry" and the size.</summary>
+    public static Task SendFile(string code, string name, byte[] contents) => Put(code, Crypto.SealFile(code, name, contents), "file");
+
+    static async Task Put(string code, byte[] sealedBytes, string kind)
     {
         using var request = new HttpRequestMessage(HttpMethod.Put, $"{Server}/{Crypto.Topic(code)}")
         {
-            Content = new ByteArrayContent(Crypto.SealImage(code, image)),
+            Content = new ByteArrayContent(sealedBytes),
         };
-        request.Headers.Add("Filename", "image.ferry");
-        request.Headers.Add("Tags", "laptop,image");
+        request.Headers.Add("Filename", kind + ".ferry");
+        request.Headers.Add("Tags", "laptop," + kind);
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));   // a few MB on a slow connection
         using var response = await Http.SendAsync(request, timeout.Token);
         response.EnsureSuccessStatusCode();

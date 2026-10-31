@@ -249,7 +249,7 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Logbook · tap to copy again" />
+                        android:text="Logbook · tap to copy again, or to open a file" />
 
                     <Button
                         android:id="@+id/clearHistory"

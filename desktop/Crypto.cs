@@ -14,6 +14,7 @@ static class Crypto
     const string Prefix = "ferry1:";
     static readonly byte[] Aad = Encoding.UTF8.GetBytes("ferry1");
     static readonly byte[] AadImage = Encoding.UTF8.GetBytes("ferry1-image");   // an image can never be opened as text, or the reverse
+    static readonly byte[] AadFile = Encoding.UTF8.GetBytes("ferry1-file");
 
     public static string NewCode() => RandomNumberGenerator.GetString(Alphabet, 26);
 
@@ -48,6 +49,23 @@ static class Crypto
 
     /// <summary>Returns null unless the bytes are an image sealed with this code.</summary>
     public static byte[]? OpenImage(string code, byte[] sealedBytes) => OpenRaw(code, sealedBytes, AadImage);
+
+    /// <summary>Encrypts a file: 2-byte big-endian name length | UTF-8 name | contents. The name is sealed too, so ntfy.sh never sees it.</summary>
+    public static byte[] SealFile(string code, string name, byte[] contents)
+    {
+        byte[] n = Encoding.UTF8.GetBytes(name);
+        return SealRaw(code, [(byte)(n.Length >> 8), (byte)n.Length, .. n, .. contents], AadFile);
+    }
+
+    /// <summary>Returns null unless the bytes are a file sealed with this code.</summary>
+    public static (string Name, byte[] Contents)? OpenFile(string code, byte[] sealedBytes)
+    {
+        byte[]? plain = OpenRaw(code, sealedBytes, AadFile);
+        if (plain is null || plain.Length < 2) return null;
+        int n = plain[0] << 8 | plain[1];
+        if (plain.Length < 2 + n) return null;
+        return (Encoding.UTF8.GetString(plain, 2, n), plain[(2 + n)..]);
+    }
 
     static byte[] SealRaw(string code, byte[] plain, byte[] aad)
     {

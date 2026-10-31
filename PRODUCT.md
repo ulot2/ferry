@@ -23,7 +23,8 @@ No account and no server of its own. The two devices pair by scanning a QR code;
 - Users glance at status to trust that the link works ("did it cross?").
 
 ## Capabilities and Constraints
-- Text and images (no other files). Text over 4 KB travels as a text file. Images travel as encrypted files, shrunk to JPEG above 1.5 MB, refused above 10 MB, saved to Pictures/Ferry on arrival. Automatic screenshot sending is opt-in.
+- Text and images sync through the clipboard. Text over 4 KB travels as a text file. Images travel as encrypted files, shrunk to JPEG above 1.5 MB, refused above 10 MB, saved to Pictures/Ferry on arrival. Automatic screenshot sending is opt-in.
+- Other files (up to 14 MB, name encrypted too) cross only when the user sends them: Send to, drag onto the window or the tray menu on the laptop; Share on the phone. A copied file is never sent. Files land in Downloads/Ferry. Larger files over Wi-Fi are planned, not built.
 - Password-manager copies on Windows are never sent.
 - All text is end-to-end encrypted. ntfy.sh keeps encrypted copies up to 12 hours so devices catch up after a disconnection; copies older than 10 minutes go to history, not the clipboard.
 - Both apps keep the last 10 crossings and offer updates from GitHub releases (public repo ulot2/ferry).

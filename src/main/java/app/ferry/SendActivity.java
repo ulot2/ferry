@@ -33,6 +33,10 @@ public class SendActivity extends Activity {
             sendImage((Uri) stream);
             return;
         }
+        if (stream instanceof Uri) {
+            sendFile((Uri) stream);   // any other shared file, also a .txt file
+            return;
+        }
         CharSequence text = getIntent().getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
         if (text == null) text = getIntent().getCharSequenceExtra(Intent.EXTRA_TEXT);
         if (text != null) send(text.toString());
@@ -150,6 +154,43 @@ public class SendActivity extends Activity {
             } catch (IOException e) {
                 Log.w("Ferry", "send screen: image not sent: " + e);
                 result = "Image not sent. Ferry could not reach ntfy.sh. Try again when you are online.";
+            }
+            String r = result;
+            runOnUiThread(() -> done(r));
+        }).start();
+    }
+
+    /** A file shared with Ferry. Only Share sends files: Ferry never sends a file because it was copied. */
+    private void sendFile(Uri uri) {
+        started = true;
+        if (!Ferry.paired(this)) {
+            done("Open Ferry and pair it with your laptop first");
+            return;
+        }
+        String name = Ferry.displayName(this, uri);
+        Toast.makeText(getApplicationContext(), "Sending " + name + "…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            String result;
+            try {
+                byte[] contents = Images.read(this, uri);   // null when unreadable or far too large
+                if (contents == null || contents.length > Ferry.MAX_FILE_BYTES) {
+                    result = name + " is over 14 MB. Ferry cannot send files that large yet.";
+                } else {
+                    try {
+                        Ferry.sendFile(this, name, contents, "phone");
+                        Ferry.crossedFile(this, Ferry.TO_LAPTOP, name, System.currentTimeMillis(), "");
+                        result = "Sent to laptop: " + name;
+                        Log.i("Ferry", "send screen: file sent");
+                    } catch (Ferry.LimitException e) {
+                        result = "ntfy.sh refused the file. It keeps at most 100 MB of your files at a time, for 3 hours. Try again later.";
+                    } catch (IOException e) {
+                        Log.w("Ferry", "send screen: file not sent: " + e);
+                        result = "File not sent. Ferry could not reach ntfy.sh. Try again when you are online.";
+                    }
+                }
+            } catch (IOException | SecurityException e) {
+                Log.w("Ferry", "send screen: file unreadable: " + e);
+                result = "Ferry could not read that file";
             }
             String r = result;
             runOnUiThread(() -> done(r));

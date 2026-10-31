@@ -21,6 +21,7 @@ final class Crypto {
     private static final String PREFIX = "ferry1:";
     private static final byte[] AAD = "ferry1".getBytes(StandardCharsets.UTF_8);
     private static final byte[] AAD_IMAGE = "ferry1-image".getBytes(StandardCharsets.UTF_8);   // an image can never be opened as text, or the reverse
+    private static final byte[] AAD_FILE = "ferry1-file".getBytes(StandardCharsets.UTF_8);
     private static final SecureRandom RNG = new SecureRandom();
 
     /** Lowercases and drops spaces and dashes, so a typed code works however it was grouped. */
@@ -70,6 +71,36 @@ final class Crypto {
     /** Returns null unless the bytes are an image sealed with this code. */
     static byte[] openImage(String code, byte[] sealed) {
         return openRaw(code, sealed, AAD_IMAGE);
+    }
+
+    /** Encrypts a file: 2-byte big-endian name length | UTF-8 name | contents. The name is sealed too, so ntfy.sh never sees it. */
+    static byte[] sealFile(String code, String name, byte[] contents) throws GeneralSecurityException {
+        byte[] n = name.getBytes(StandardCharsets.UTF_8);
+        byte[] plain = new byte[2 + n.length + contents.length];
+        plain[0] = (byte) (n.length >> 8);
+        plain[1] = (byte) n.length;
+        System.arraycopy(n, 0, plain, 2, n.length);
+        System.arraycopy(contents, 0, plain, 2 + n.length, contents.length);
+        return sealRaw(code, plain, AAD_FILE);
+    }
+
+    static final class SealedFile {
+        final String name;
+        final byte[] contents;
+
+        SealedFile(String name, byte[] contents) {
+            this.name = name;
+            this.contents = contents;
+        }
+    }
+
+    /** Returns null unless the bytes are a file sealed with this code. */
+    static SealedFile openFile(String code, byte[] sealed) {
+        byte[] plain = openRaw(code, sealed, AAD_FILE);
+        if (plain == null || plain.length < 2) return null;
+        int n = (plain[0] & 0xFF) << 8 | (plain[1] & 0xFF);
+        if (plain.length < 2 + n) return null;
+        return new SealedFile(new String(plain, 2, n, StandardCharsets.UTF_8), java.util.Arrays.copyOfRange(plain, 2 + n, plain.length));
     }
 
     private static byte[] sealRaw(String code, byte[] plain, byte[] aad) throws GeneralSecurityException {

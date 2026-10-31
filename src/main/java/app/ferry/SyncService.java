@@ -117,6 +117,10 @@ public class SyncService extends Service {
                         receiveImage(code, m);
                         continue;
                     }
+                    if (hasTag(m, "file")) {
+                        receiveFile(code, m);
+                        continue;
+                    }
                     String sealed = m.has("attachment") ? fetchText(m.getJSONObject("attachment")) : m.optString("message");
                     String text = Crypto.open(code, sealed);   // null: not from our laptop, ignore it
                     if (text == null || text.isEmpty()) continue;
@@ -182,19 +186,9 @@ public class SyncService extends Service {
     /** An image from the laptop: a sealed file on ntfy.sh. Errors stay here, so the text connection keeps running. */
     private void receiveImage(String code, JSONObject m) {
         if (!Ferry.imagesOn(this)) return;
-        JSONObject att = m.optJSONObject("attachment");
-        if (att == null || !att.optString("url").startsWith(Ferry.SERVER) || att.optLong("size") > 16L * 1024 * 1024) return;
         try {
-            HttpURLConnection c = (HttpURLConnection) new URL(att.getString("url")).openConnection();
-            c.setConnectTimeout(15_000);
-            c.setReadTimeout(120_000);
-            byte[] sealed;
-            try (InputStream s = c.getInputStream()) {
-                sealed = Ferry.readBytes(s, 16 * 1024 * 1024);
-            } finally {
-                c.disconnect();
-            }
-            byte[] image = Crypto.openImage(code, sealed);
+            byte[] sealed = fetchSealed(m);
+            byte[] image = sealed == null ? null : Crypto.openImage(code, sealed);
             if (image == null) return;   // not from our laptop
             long at = m.optLong("time", System.currentTimeMillis() / 1000) * 1000;
             File file = Images.keep(this, image);
@@ -206,6 +200,40 @@ public class SyncService extends Service {
             }
         } catch (Exception e) {
             Log.w("Ferry", "image not received: " + e);
+        }
+    }
+
+    /** A file from the laptop: a sealed attachment, saved in Downloads/Ferry. Errors stay here, so the text connection keeps running. */
+    private void receiveFile(String code, JSONObject m) {
+        try {
+            byte[] sealed = fetchSealed(m);
+            Crypto.SealedFile file = sealed == null ? null : Crypto.openFile(code, sealed);
+            if (file == null) return;   // not from our laptop
+            long at = m.optLong("time", System.currentTimeMillis() / 1000) * 1000;
+            Uri saved = Ferry.saveDownload(this, file.name, file.contents);
+            String name = Ferry.displayName(this, saved);   // Android adds " (1)" when the name is taken
+            Ferry.crossedFile(this, Ferry.TO_PHONE, name, at, saved.toString());
+            if (System.currentTimeMillis() - at < 10 * 60_000) {
+                String peer = Ferry.prefs(this).getString("peer", "");
+                PendingIntent open = PendingIntent.getActivity(this, 4, Ferry.viewFile(this, saved), PendingIntent.FLAG_IMMUTABLE);
+                notifyCrossing("File from " + (peer.isEmpty() ? "your laptop" : peer), name + ", in Downloads/Ferry", null, open, "Open");
+            }
+        } catch (Exception e) {
+            Log.w("Ferry", "file not received: " + e);
+        }
+    }
+
+    /** Downloads a sealed attachment, only from ntfy.sh and only up to 16 MB. Returns null for anything else. */
+    private static byte[] fetchSealed(JSONObject m) throws IOException {
+        JSONObject att = m.optJSONObject("attachment");
+        if (att == null || !att.optString("url").startsWith(Ferry.SERVER) || att.optLong("size") > 16L * 1024 * 1024) return null;
+        HttpURLConnection c = (HttpURLConnection) new URL(att.optString("url")).openConnection();
+        c.setConnectTimeout(15_000);
+        c.setReadTimeout(120_000);
+        try (InputStream s = c.getInputStream()) {
+            return Ferry.readBytes(s, 16 * 1024 * 1024);
+        } finally {
+            c.disconnect();
         }
     }
 
@@ -294,17 +322,18 @@ public class SyncService extends Service {
             // A copied link: tapping the notification (or Open link) opens it in the browser.
             PendingIntent open = PendingIntent.getActivity(this, 3, new Intent(Intent.ACTION_VIEW, link)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE);
-            notifyCrossing("Link from " + from, link.toString(), null, open);
+            notifyCrossing("Link from " + from, link.toString(), null, open, "Open link");
         } else {
             notifyCrossing("Copied from " + from, Ferry.preview(text), null);
         }
     }
 
     private void notifyCrossing(String title, String text, Bitmap picture) {
-        notifyCrossing(title, text, picture, null);
+        notifyCrossing(title, text, picture, null, null);
     }
 
-    private void notifyCrossing(String title, String text, Bitmap picture, PendingIntent openLink) {
+    /** With open set, tapping the notification (or the action button with openLabel) opens the link or the file. */
+    private void notifyCrossing(String title, String text, Bitmap picture, PendingIntent open, String openLabel) {
         NotificationManager nm = getSystemService(NotificationManager.class);
         NotificationChannel ch = new NotificationChannel(CROSSINGS, "Crossings", NotificationManager.IMPORTANCE_HIGH);
         ch.setSound(null, null);
@@ -318,8 +347,8 @@ public class SyncService extends Service {
                 .setAutoCancel(true)
                 .setTimeoutAfter(8_000);
         if (picture != null) b.setLargeIcon(picture).setStyle(new Notification.BigPictureStyle().bigPicture(picture));
-        if (openLink != null) {
-            b.setContentIntent(openLink).addAction(new Notification.Action.Builder(null, "Open link", openLink).build());
+        if (open != null) {
+            b.setContentIntent(open).addAction(new Notification.Action.Builder(null, openLabel, open).build());
         }
         nm.notify(2, b.build());
     }

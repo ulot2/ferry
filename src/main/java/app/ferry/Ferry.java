@@ -1,14 +1,20 @@
 package app.ferry;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.view.accessibility.AccessibilityManager;
+import android.webkit.MimeTypeMap;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -105,12 +111,21 @@ final class Ferry {
     }
 
     /** For images, text is a short label ("Image", "Screenshot") and image is the kept file path, or "" when none was kept. */
-    static synchronized void crossed(Context c, String direction, String text, long at, String image) {
+    static void crossed(Context c, String direction, String text, long at, String image) {
+        crossed(c, direction, text, at, "image", image);
+    }
+
+    /** For files, text is the file name and file is the saved copy in Downloads/Ferry (a content:// link), or "" for a sent file. */
+    static void crossedFile(Context c, String direction, String name, long at, String file) {
+        crossed(c, direction, name, at, "file", file);
+    }
+
+    private static synchronized void crossed(Context c, String direction, String text, long at, String key, String value) {
         JSONArray old = history(c), now = new JSONArray();
         try {
             if (text.length() <= HISTORY_MAX_CHARS) {
                 JSONObject item = new JSONObject().put("dir", direction).put("text", text).put("at", at);
-                if (image != null) item.put("image", image);
+                if (value != null) item.put(key, value);
                 now.put(item);
             }
             for (int i = 0; i < old.length() && now.length() < HISTORY_SIZE; i++) now.put(old.get(i));
@@ -118,7 +133,7 @@ final class Ferry {
             throw new IllegalStateException(e);   // only strings and numbers go in
         }
         SharedPreferences.Editor e = prefs(c).edit().putString("history", now.toString());
-        if (image == null) e.putString("last_text", text);   // only text can bounce back through automatic sending
+        if (value == null) e.putString("last_text", text);   // only text can bounce back through automatic sending
         if (at >= prefs(c).getLong("pending_at", Long.MAX_VALUE)) e.remove("pending").remove("pending_at");   // a newer crossing replaces the text that waits
         e.apply();
     }
@@ -202,16 +217,39 @@ final class Ferry {
         }
     }
 
+    /** ntfy.sh takes files up to 15 MB. The name and the encryption add a few hundred bytes. */
+    static final int MAX_FILE_BYTES = 14 * 1024 * 1024;
+
+    /** ntfy.sh refused a file: too large, or over its 100 MB of files per user. */
+    static final class LimitException extends IOException {
+        LimitException(int status) {
+            super("ntfy.sh answered " + status);
+        }
+    }
+
     /** Encrypts and sends an image (PNG or JPEG bytes) to the laptop as a file. Blocks; call it off the main thread. */
     static void sendImage(Context c, byte[] image, String tags) throws IOException {
         String code = code(c);
         if (code.isEmpty()) throw new IOException("Not paired");
-        byte[] body;
         try {
-            body = Crypto.sealImage(code, image);
+            put(code, Crypto.sealImage(code, image), tags, "image");
         } catch (GeneralSecurityException e) {
             throw new IOException(e);
         }
+    }
+
+    /** Encrypts and sends a file with its name. ntfy.sh only sees "file.ferry" and the size. Blocks; call it off the main thread. */
+    static void sendFile(Context c, String name, byte[] contents, String tags) throws IOException {
+        String code = code(c);
+        if (code.isEmpty()) throw new IOException("Not paired");
+        try {
+            put(code, Crypto.sealFile(code, name, contents), tags, "file");
+        } catch (GeneralSecurityException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private static void put(String code, byte[] body, String tags, String kind) throws IOException {
         HttpURLConnection con = (HttpURLConnection) new URL(SERVER + Crypto.topic(code)).openConnection();
         try {
             con.setRequestMethod("PUT");
@@ -219,16 +257,63 @@ final class Ferry {
             con.setFixedLengthStreamingMode(body.length);
             con.setConnectTimeout(15_000);
             con.setReadTimeout(120_000);   // a few MB on a slow connection
-            con.setRequestProperty("Filename", "image.ferry");
-            con.setRequestProperty("Tags", tags + ",image");
+            con.setRequestProperty("Filename", kind + ".ferry");
+            con.setRequestProperty("Tags", tags + "," + kind);
             try (OutputStream out = con.getOutputStream()) {
                 out.write(body);
             }
             int status = con.getResponseCode();
+            if (status == 413 || status == 429) throw new LimitException(status);
             if (status != 200) throw new IOException("ntfy.sh answered " + status);
         } finally {
             con.disconnect();
         }
+    }
+
+    /** Saves a file from the laptop in Downloads/Ferry and returns its content:// link. Android renames it if the name is taken. */
+    static Uri saveDownload(Context c, String name, byte[] contents) throws IOException {
+        // No folder parts or characters that Android refuses, and no hidden ".name" files.
+        String safe = name.replaceAll("[\\\\/:*?\"<>|\\x00-\\x1f]", "_").replaceAll("^[.\\s]+|[.\\s]+$", "");
+        if (safe.isEmpty()) safe = "file";
+        int dot = safe.lastIndexOf('.');
+        String ext = dot < 0 ? "" : safe.substring(dot + 1).toLowerCase(Locale.ROOT);
+        String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+        ContentResolver cr = c.getContentResolver();
+        ContentValues v = new ContentValues();
+        v.put(MediaStore.Downloads.DISPLAY_NAME, safe);
+        v.put(MediaStore.Downloads.MIME_TYPE, type != null ? type : "application/octet-stream");
+        v.put(MediaStore.Downloads.RELATIVE_PATH, "Download/Ferry");
+        v.put(MediaStore.Downloads.IS_PENDING, 1);
+        Uri item = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+        if (item == null) throw new IOException("Downloads refused " + safe);
+        try (OutputStream out = cr.openOutputStream(item)) {
+            if (out == null) throw new IOException("Cannot write " + safe);
+            out.write(contents);
+        } catch (IOException e) {
+            cr.delete(item, null, null);   // no empty, half-written file left in Downloads
+            throw e;
+        }
+        v.clear();
+        v.put(MediaStore.Downloads.IS_PENDING, 0);
+        cr.update(item, v, null, null);
+        return item;
+    }
+
+    /** Opens a saved file in an app that can show it. */
+    static Intent viewFile(Context c, Uri uri) {
+        return new Intent(Intent.ACTION_VIEW).setDataAndType(uri, c.getContentResolver().getType(uri))
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+    }
+
+    /** The display name of a shared file, or "file" when the sharing app does not give one. */
+    static String displayName(Context c, Uri uri) {
+        try (Cursor cur = c.getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cur != null && cur.moveToFirst() && cur.getString(0) != null) return cur.getString(0);
+        } catch (RuntimeException e) {
+            // Some apps share links that cannot be queried. The name is only a label.
+        }
+        String last = uri.getLastPathSegment();
+        return last == null || last.isEmpty() ? "file" : last;
     }
 
     static byte[] readBytes(InputStream in, int limit) throws IOException {

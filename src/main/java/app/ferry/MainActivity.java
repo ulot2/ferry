@@ -3,6 +3,7 @@ package app.ferry;
 import android.Manifest;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
@@ -270,7 +271,8 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             chart.set(laptopName, "This phone", "course " + time, toPhone);
             route.setText(("LAST CROSSING · " + (toPhone ? "LAPTOP TO PHONE" : "PHONE TO LAPTOP")
                     + (DateUtils.isToday(at) ? "" : " · " + DateUtils.formatDateTime(this, at, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH))).toUpperCase(Locale.getDefault()));
-            preview.setText(!last.has("image") ? "“" + Ferry.preview(last.optString("text")) + "”"
+            preview.setText(last.has("file") ? last.optString("text") + (toPhone ? ", in Downloads/Ferry" : ", in Downloads\\Ferry on the laptop")
+                    : !last.has("image") ? "“" + Ferry.preview(last.optString("text")) + "”"
                     : toPhone ? last.optString("text") + ", in your clipboard and in Pictures/Ferry"
                     : last.optString("text") + ", in the laptop's clipboard");
         }
@@ -367,11 +369,13 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             boolean toPhone = Ferry.TO_PHONE.equals(item.optString("dir"));
             ((TextView) row.findViewById(R.id.itemMeta)).setText(when);
             ((TextView) row.findViewById(R.id.itemArrow)).setText(toPhone ? "→" : "←");
-            String image = item.optString("image", null);
-            ((TextView) row.findViewById(R.id.itemText)).setText(image != null ? text : Ferry.preview(text));
-            row.setContentDescription((toPhone ? "From laptop, " : "To laptop, ") + when + ". Copy again: " + (image != null ? text : Ferry.preview(text)));
+            String image = item.optString("image", null), file = item.optString("file", null);
+            ((TextView) row.findViewById(R.id.itemText)).setText(file != null ? "File · " + text : image != null ? text : Ferry.preview(text));
+            row.setContentDescription((toPhone ? "From laptop, " : "To laptop, ") + when + (file != null ? ". Open file: " + text
+                    : ". Copy again: " + (image != null ? text : Ferry.preview(text))));
             row.setOnClickListener(v -> {
-                if (image == null) copyAgain(text);
+                if (file != null) openFile(file);
+                else if (image == null) copyAgain(text);
                 else copyImageAgain(image);
             });
             historyList.addView(row);
@@ -405,6 +409,18 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         }
         getSystemService(ClipboardManager.class).setPrimaryClip(Images.clip(this, file));
         if (Build.VERSION.SDK_INT < 33) Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
+    }
+
+    private void openFile(String uri) {
+        if (uri.isEmpty()) {
+            Toast.makeText(this, "Only files that came to this phone can be opened here", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            startActivity(Ferry.viewFile(this, Uri.parse(uri)));
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "No app on this phone opens this kind of file. Find it in Downloads/Ferry.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void copyAgain(String text) {

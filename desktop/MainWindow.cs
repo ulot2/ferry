@@ -95,6 +95,14 @@ sealed class MainWindow : Form
         reset = AddButton("Reset pairing", PillKind.Link, 296, 574, 112, 32);
         reset.Click += (_, _) => ConfirmReset();
 
+        // Drop files anywhere on the window to send them to the phone.
+        foreach (Control target in Controls.Cast<Control>().Append(this))
+        {
+            target.AllowDrop = true;
+            target.DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true ? DragDropEffects.Copy : DragDropEffects.None;
+            target.DragDrop += async (_, e) => { if (e.Data?.GetData(DataFormats.FileDrop) is string[] paths) await app.SendFiles(paths); };
+        }
+
         ResumeLayout(false);
         Render();
     }
@@ -112,7 +120,17 @@ sealed class MainWindow : Form
         var item = earlier[history.SelectedIndex];
         try
         {
-            if (item.ImagePath is null) app.CopyQuietly(item.Text);
+            if (item.FilePath is not null)
+            {
+                if (!File.Exists(item.FilePath))
+                {
+                    hint = "That file is no longer there.";
+                    Invalidate();
+                    return;
+                }
+                TrayApp.CopyFileQuietly(item.FilePath);
+            }
+            else if (item.ImagePath is null) app.CopyQuietly(item.Text);
             else if (File.Exists(item.ImagePath)) app.CopyImageQuietly(item.ImagePath);
             else
             {
@@ -142,7 +160,8 @@ sealed class MainWindow : Form
 
         string when = item.Time.Date == DateTime.Today ? item.Time.ToString("t") : item.Time.ToString("d MMM");
         bool toPhone = item.Direction.EndsWith("Phone");
-        string line = item.ImagePath is null ? TrayApp.Preview(item.Text) : item.ImagePath == "" ? "Image" : "Image  ·  " + Path.GetFileName(item.ImagePath);
+        string line = item.FilePath is not null ? "File  ·  " + item.Text
+            : item.ImagePath is null ? TrayApp.Preview(item.Text) : item.ImagePath == "" ? "Image" : "Image  ·  " + Path.GetFileName(item.ImagePath);
         var flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine;
         TextRenderer.DrawText(g, when, bold, new Rectangle(b.X + (int)(4 * s), b.Y, (int)(66 * s), b.Height), Chart.Ink, flags);
         TextRenderer.DrawText(g, toPhone ? "→" : "←", bold, new Rectangle(b.X + (int)(72 * s), b.Y, (int)(24 * s), b.Height), Chart.Course, flags);
@@ -271,6 +290,7 @@ sealed class MainWindow : Form
             : "LAST CROSSING · " + (toPhone ? "LAPTOP TO PHONE" : "PHONE TO LAPTOP") + (c.Time.Date == DateTime.Today ? "" : " · " + c.Time.ToString("d MMM").ToUpperInvariant());
         Chart.DrawTracked(g, kick, kicker, Chart.InkMuted, x, 166 * s, 1.2f * s);
         string text = c is null ? "Copy something here, or tap Send on your phone."
+            : c.FilePath is not null ? (toPhone ? $"{c.Text}, now in Downloads/Ferry on the phone." : $"{c.Text}, now in Downloads\\Ferry.")
             : c.ImagePath is not null ? (c.ImagePath == "" ? "An image, now in the phone's clipboard." : "An image, now in your clipboard and Pictures\\Ferry.")
             : $"“{TrayApp.Preview(c.Text)}”";
         TextRenderer.DrawText(g, text, crossing, new Rectangle((int)x, (int)(186 * s), (int)w, (int)(46 * s)), Chart.Ink,
