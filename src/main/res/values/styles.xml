@@ -85,6 +85,32 @@
         <item name="android:paddingEnd">10dp</item>
     </style>
 
+    <!-- Settings: a section heading, and a switch row (label left, switch right). -->
+    <style name="Ferry.Section" parent="Ferry.Kicker">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">32dp</item>
+        <item name="android:layout_marginBottom">4dp</item>
+    </style>
+
+    <style name="Ferry.Switch">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:fontFamily">@font/barlow_medium</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:thumbTint">@color/switch_thumb</item>
+        <item name="android:trackTint">@color/switch_track</item>
+    </style>
+
+    <style name="Ferry.Hint" parent="Ferry.Body">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
     <style name="Ferry.Chip" parent="Ferry.Button">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_marginEnd">8dp</item>

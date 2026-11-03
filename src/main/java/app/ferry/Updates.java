@@ -9,6 +9,7 @@ import org.json.JSONObject;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.function.Consumer;
 
 /** Checks GitHub for a newer Ferry release, at most every 6 hours. The result goes into prefs for MainActivity. */
 final class Updates {
@@ -21,7 +22,14 @@ final class Updates {
         new Thread(() -> check(c.getApplicationContext())).start();
     }
 
-    private static void check(Context c) {
+    /** "Check for updates" in Settings. done gets false when GitHub could not be reached; it runs on a background thread. */
+    static void checkNow(Context c, Consumer<Boolean> done) {
+        Ferry.prefs(c).edit().putLong("update_checked", System.currentTimeMillis()).apply();
+        Context app = c.getApplicationContext();
+        new Thread(() -> done.accept(check(app))).start();
+    }
+
+    private static boolean check(Context c) {
         try {
             HttpURLConnection con = (HttpURLConnection) new URL(LATEST).openConnection();
             con.setConnectTimeout(10_000);
@@ -46,8 +54,9 @@ final class Updates {
                     .putString("update_version", newer ? version : "")
                     .putString("update_url", newer ? apk : "")
                     .apply();
+            return true;
         } catch (Exception ignored) {
-            // offline or GitHub unreachable: try again at the next check
+            return false;   // offline or GitHub unreachable: try again at the next check
         }
     }
 

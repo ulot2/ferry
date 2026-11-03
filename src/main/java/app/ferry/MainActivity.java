@@ -6,9 +6,11 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -37,22 +39,30 @@ import java.text.DateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-/** The chart screen: link status, last crossing, Send, notices, logbook, switches and pairing. See DESIGN.md. */
+/** The chart screen: link status, last crossing, Send, one notice at most, and the logbook. Pairing until paired. See DESIGN.md. */
 public class MainActivity extends Activity implements SharedPreferences.OnSharedPreferenceChangeListener {
     private static final String FERRY_AUTO_HELP = "https://github.com/ulot2/ferry#ferry-auto-automatic-sending";
-    private static final int PHOTOS = 1;
-    private View header, lamp, crossing, manualRow, batteryCard, xiaomiCard, updateCard, autoCard, historyCard, autoAppInfo, chips, pairCard;
-    private TextView statusText, route, preview, pairTitle, pairBody, pairError, updateTitle, updateBody, autoTitle, autoBody, screenshotsBody;
-    private Button send, scan, pairAlt, autoToggle, updateButton, autoChip, imagesChip, screenshotsChip;
-    private ViewGroup historyList, content;
+    private View header, lamp, crossing, manualRow, batteryCard, updateCard, autoCard, historyCard, pairCard;
+    private TextView statusText, route, preview, pairTitle, pairBody, pairError, updateTitle, updateBody;
+    private Button send, pairAlt, updateButton;
+    private ViewGroup historyList;
     private ChartView chart;
     private EditText codeField;
-    private View wordmark, statusPill;
-    private int wordmarkTop, pillTop, headerHeight;
+    private View wordmark, statusPill, settings;
+    private int wordmarkTop, pillTop, settingsTop, headerHeight;
+    private String theme;   // the theme this screen was built with; Settings can change it
+
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        Configuration o = Ferry.themeOverride(base);
+        if (o != null) applyOverrideConfiguration(o);
+    }
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        theme = Ferry.theme(this);
         setContentView(R.layout.activity_main);
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 0);
 
@@ -60,15 +70,11 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         chart = findViewById(R.id.chart);
         lamp = findViewById(R.id.lamp);
         crossing = findViewById(R.id.crossing);
-        content = findViewById(R.id.content);
         manualRow = findViewById(R.id.manualRow);
         batteryCard = findViewById(R.id.batteryCard);
-        xiaomiCard = findViewById(R.id.xiaomiCard);
         updateCard = findViewById(R.id.updateCard);
         autoCard = findViewById(R.id.autoCard);
         historyCard = findViewById(R.id.historyCard);
-        autoAppInfo = findViewById(R.id.autoAppInfo);
-        chips = findViewById(R.id.chips);
         pairCard = findViewById(R.id.pairCard);
         statusText = findViewById(R.id.statusText);
         route = findViewById(R.id.route);
@@ -79,37 +85,28 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         updateTitle = findViewById(R.id.updateTitle);
         updateBody = findViewById(R.id.updateBody);
         updateButton = findViewById(R.id.update);
-        autoTitle = findViewById(R.id.autoTitle);
-        autoBody = findViewById(R.id.autoBody);
-        screenshotsBody = findViewById(R.id.screenshotsBody);
         send = findViewById(R.id.send);
-        scan = findViewById(R.id.scan);
         pairAlt = findViewById(R.id.pairAlt);
-        autoToggle = findViewById(R.id.autoToggle);
-        autoChip = findViewById(R.id.autoChip);
-        imagesChip = findViewById(R.id.imagesChip);
-        screenshotsChip = findViewById(R.id.screenshotsChip);
         historyList = findViewById(R.id.historyList);
         codeField = findViewById(R.id.topic);
 
         // Edge to edge: the chart runs under the status bar; the content clears the navigation bar.
         wordmark = findViewById(R.id.wordmark);
         statusPill = findViewById(R.id.statusPill);
+        settings = findViewById(R.id.settings);
         wordmarkTop = ((ViewGroup.MarginLayoutParams) wordmark.getLayoutParams()).topMargin;
         pillTop = ((ViewGroup.MarginLayoutParams) statusPill.getLayoutParams()).topMargin;
+        settingsTop = ((ViewGroup.MarginLayoutParams) settings.getLayoutParams()).topMargin;
         headerHeight = header.getLayoutParams().height;
         findViewById(R.id.scroll).setOnApplyWindowInsetsListener(this::applyInsets);
 
         boolean autoEdition = Ferry.autoEdition(this);
+        settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         send.setOnClickListener(v -> startActivity(new Intent(this, SendActivity.class)));
-        scan.setOnClickListener(v -> scan());
+        findViewById(R.id.scan).setOnClickListener(v -> scan());
         pairAlt.setOnClickListener(v -> {
-            if (Ferry.paired(this)) {
-                Ferry.unpair(this);
-            } else {
-                manualRow.setVisibility(manualRow.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
-                if (manualRow.getVisibility() == View.VISIBLE) codeField.requestFocus();
-            }
+            manualRow.setVisibility(manualRow.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+            if (manualRow.getVisibility() == View.VISIBLE) codeField.requestFocus();
             render();
         });
         findViewById(R.id.manualSave).setOnClickListener(v -> {
@@ -122,33 +119,12 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
             manualRow.setVisibility(View.GONE);
             render();
         });
-        autoChip.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        imagesChip.setOnClickListener(v -> {
-            Ferry.prefs(this).edit().putBoolean("images", !Ferry.imagesOn(this)).apply();
-            restartSync();
-        });
-        screenshotsChip.setOnClickListener(v -> {
-            boolean on = !(Ferry.screenshotsOn(this) && SyncService.canReadPhotos(this));
-            if (on && !SyncService.canReadPhotos(this)) {
-                // Ask first; it turns on in onRequestPermissionsResult if allowed.
-                requestPermissions(new String[]{Build.VERSION.SDK_INT >= 33
-                        ? Manifest.permission.READ_MEDIA_IMAGES : Manifest.permission.READ_EXTERNAL_STORAGE}, PHOTOS);
-                return;
-            }
-            Ferry.prefs(this).edit().putBoolean("screenshots", on).apply();
-            restartSync();
-        });
         findViewById(R.id.clearHistory).setOnClickListener(v -> Ferry.clearHistory(this));
-        // Ferry Auto cannot be installed from the phone (Play Protect), so its buttons lead to the computer steps instead.
+        // Ferry Auto cannot be installed from the phone (Play Protect), so its update button leads to the computer steps instead.
         updateButton.setOnClickListener(v -> open(autoEdition ? FERRY_AUTO_HELP : Ferry.prefs(this).getString("update_url", "")));
-        autoToggle.setOnClickListener(v -> {
-            if (autoEdition) startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-            else open(FERRY_AUTO_HELP);
-        });
-        View.OnClickListener appInfo = v -> startActivity(new Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
-        autoAppInfo.setOnClickListener(appInfo);
-        findViewById(R.id.appSettings).setOnClickListener(appInfo);
+        findViewById(R.id.autoToggle).setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        findViewById(R.id.autoAppInfo).setOnClickListener(v -> startActivity(new Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))));
         findViewById(R.id.battery).setOnClickListener(v -> startActivity(new Intent(
                 Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName()))));
 
@@ -163,9 +139,10 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         ViewGroup.LayoutParams lp = header.getLayoutParams();
         lp.height = headerHeight + top;
         header.setLayoutParams(lp);
-        // The chart fills the whole header, under the status bar; only the wordmark and pill move down.
+        // The chart fills the whole header, under the status bar; only the wordmark, the pill and the settings button move down.
         ((ViewGroup.MarginLayoutParams) wordmark.getLayoutParams()).topMargin = wordmarkTop + top;
         ((ViewGroup.MarginLayoutParams) statusPill.getLayoutParams()).topMargin = pillTop + top;
+        ((ViewGroup.MarginLayoutParams) settings.getLayoutParams()).topMargin = settingsTop + top;
         v.setPadding(insets.getSystemWindowInsetLeft(), 0, insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
         return insets.consumeSystemWindowInsets();
     }
@@ -186,6 +163,10 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
     @Override
     protected void onResume() {
         super.onResume();
+        if (!theme.equals(Ferry.theme(this))) {
+            recreate();   // the theme changed in Settings
+            return;
+        }
         Ferry.prefs(this).registerOnSharedPreferenceChangeListener(this);
         Updates.checkSoon(this);
         render();   // also picks up settings changed while we were away (battery, accessibility)
@@ -235,9 +216,7 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         SharedPreferences p = Ferry.prefs(this);
         boolean paired = Ferry.paired(this);
         boolean autoEdition = Ferry.autoEdition(this);
-        boolean auto = paired && Ferry.autoSendOn(this);
         String peer = p.getString("peer", "");
-        String laptop = peer.isEmpty() ? "your laptop" : peer;
 
         // Status pill on the chart. Steady = connected, adrift = offline, muted = connecting or not paired.
         String status = paired ? p.getString("status", Ferry.STATUS_CONNECTING) : "";
@@ -278,73 +257,32 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         }
         renderHistory(history);
 
-        // One primary action per state: Send when paired, Scan when not. Pairing moves to the top until paired.
+        // One primary action per state: Send when paired, Scan when not. Pairing shows only until paired; after that it is in Settings.
         send.setVisibility(paired ? View.VISIBLE : View.GONE);
-        content.removeView(pairCard);
-        content.addView(pairCard, paired ? content.getChildCount() : 1);
-        ((LinearLayout.LayoutParams) pairCard.getLayoutParams()).topMargin = (int) ((paired ? 24 : 18) * getResources().getDisplayMetrics().density);
-        if (paired) {
-            String code = Ferry.code(this);
-            pairTitle.setText("Paired with " + laptop);
-            pairBody.setText("Pairing code ends in " + code.substring(code.length() - 4) + ". Scan a new code if you reset pairing on the laptop.");
-            style(scan, false);
-            scan.setText("Scan new code");
-            pairAlt.setText("Unpair");
-        } else {
+        pairCard.setVisibility(paired ? View.GONE : View.VISIBLE);
+        if (!paired) {
             pairTitle.setText(p.contains("topic") ? "Pair again" : "Pair with your laptop");
             pairBody.setText(p.contains("topic")
                     ? "Ferry now encrypts your text. Update Ferry on your laptop, then scan the new QR code it shows."
                     : "On your laptop, open Ferry from the tray. Then scan the QR code it shows.");
-            style(scan, true);
-            scan.setText("Scan QR code");
             pairAlt.setText(manualRow.getVisibility() == View.VISIBLE ? "Hide code entry" : "Type the code");
         }
 
+        // At most one notice, the most urgent first: an update, then background use, then automatic sending (Ferry Auto).
         String update = p.getString("update_version", "");
         // The saved result may predate an install (for example Ferry Auto over Ferry), so check it against this version.
         if (!update.isEmpty() && !Updates.newer(update, Updates.installed(this))) update = "";
-        updateCard.setVisibility(update.isEmpty() ? View.GONE : View.VISIBLE);
+        boolean showUpdate = !update.isEmpty();
+        boolean showBattery = !showUpdate && paired && !getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
+        boolean showAuto = !showUpdate && !showBattery && paired && autoEdition && !Ferry.autoSendOn(this);
+        updateCard.setVisibility(showUpdate ? View.VISIBLE : View.GONE);
+        batteryCard.setVisibility(showBattery ? View.VISIBLE : View.GONE);
+        autoCard.setVisibility(showAuto ? View.VISIBLE : View.GONE);
         updateTitle.setText((autoEdition ? "Ferry Auto " : "Ferry ") + update + " is ready");
         updateBody.setText(autoEdition
                 ? "Install it from your computer, the same way you installed Ferry Auto. Your pairing and history stay."
                 : "Download it, then install it over this version. Your pairing and history stay.");
         updateButton.setText(autoEdition ? "How to update" : "Download update");
-
-        // The automatic-sending notice only while it is off; the chip shows its state otherwise.
-        autoCard.setVisibility(paired && !auto ? View.VISIBLE : View.GONE);
-        if (autoEdition) {
-            autoTitle.setText("Send copies automatically");
-            autoBody.setText("Skip the Send button. Ferry uses Android's accessibility permission to notice taps on Copy. It reads only the label of what you tap, not the rest of the screen.\n\n"
-                    + "If the switch is greyed out, open App info, tap the ⋮ menu, then Allow restricted settings.");
-            autoToggle.setText("Turn on");
-            autoAppInfo.setVisibility(View.VISIBLE);
-        } else {
-            autoTitle.setText("Want copies to send by themselves?");
-            autoBody.setText("That needs Ferry Auto, a second edition of this app. Google Play Protect blocks it in phone browsers, "
-                    + "so you install it from a Windows computer with one script. Your pairing and history stay.");
-            autoToggle.setText("How to get Ferry Auto");
-            autoAppInfo.setVisibility(View.GONE);
-        }
-
-        // Chips: filled = on, outlined = off.
-        chips.setVisibility(paired ? View.VISIBLE : View.GONE);
-        autoChip.setVisibility(autoEdition ? View.VISIBLE : View.GONE);
-        chip(autoChip, "Auto-send", auto);
-        chip(imagesChip, "Images", Ferry.imagesOn(this));
-        boolean shots = Ferry.screenshotsOn(this) && SyncService.canReadPhotos(this);
-        chip(screenshotsChip, "Screenshots", shots);
-        screenshotsChip.setEnabled(Ferry.imagesOn(this));
-        boolean missingPermission = !SyncService.canReadPhotos(this) && p.getBoolean("screenshots", false);
-        screenshotsBody.setVisibility(paired && (shots || missingPermission) ? View.VISIBLE : View.GONE);
-        screenshotsBody.setText(missingPermission
-                ? "Ferry needs the Photos permission set to \"Allow all\" to notice new screenshots. Open App info > Permissions > Photos."
-                : "Each new screenshot goes to the laptop's clipboard by itself.");
-
-        PowerManager pm = getSystemService(PowerManager.class);
-        batteryCard.setVisibility(paired && !pm.isIgnoringBatteryOptimizations(getPackageName()) ? View.VISIBLE : View.GONE);
-        String maker = Build.MANUFACTURER.toLowerCase(Locale.ROOT);
-        boolean xiaomi = maker.contains("xiaomi") || maker.contains("redmi") || maker.contains("poco");
-        xiaomiCard.setVisibility(paired && xiaomi ? View.VISIBLE : View.GONE);
     }
 
     private void renderHistory(JSONArray history) {
@@ -382,21 +320,6 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         }
     }
 
-    @Override
-    public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
-        super.onRequestPermissionsResult(request, permissions, results);
-        if (request != PHOTOS) return;
-        boolean allowed = SyncService.canReadPhotos(this);
-        Ferry.prefs(this).edit().putBoolean("screenshots", allowed).apply();
-        if (allowed) restartSync();
-        render();
-    }
-
-    private void restartSync() {
-        stopService(new Intent(this, SyncService.class));
-        SyncService.start(this);
-    }
-
     private void open(String url) {
         if (!url.isEmpty()) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
     }
@@ -427,17 +350,5 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         Ferry.prefs(this).edit().putString("last_text", text).apply();   // so automatic sending does not send it back
         getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("Ferry", text));
         if (Build.VERSION.SDK_INT < 33) Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();   // Android 13+ shows its own
-    }
-
-    private void style(Button b, boolean primary) {
-        b.setBackgroundResource(primary ? R.drawable.bg_primary : R.drawable.bg_chip_off);
-        b.setTextColor(getColor(primary ? R.color.on_act : R.color.ink));
-    }
-
-    private void chip(Button b, String name, boolean on) {
-        b.setText(name);
-        b.setBackgroundResource(on ? R.drawable.bg_chip_on : R.drawable.bg_chip_off);
-        b.setTextColor(getColor(on ? R.color.chip_on_text : R.color.ink));
-        b.setContentDescription(name + (on ? ", on" : ", off"));
     }
 }

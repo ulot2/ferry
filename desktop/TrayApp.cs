@@ -56,6 +56,7 @@ sealed class TrayApp : ApplicationContext
             Settings.Save();
         }
         if (firstRun) StartWithWindows = true;
+        Chart.Apply(Settings.Theme);
         Shortcuts();
 
         pauseItem.Checked = Settings.Paused;
@@ -95,6 +96,7 @@ sealed class TrayApp : ApplicationContext
         // After a network change or sleep the old stream is dead, and Sync needs up to 90 s to notice. Reconnect at once.
         NetworkChange.NetworkAddressChanged += OnNetworkChanged;
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         showWait = ThreadPool.RegisterWaitForSingleObject(show, (_, _) => ui.Post(_ => ShowWindow(), null), null, -1, false);
         updateTimer.Tick += async (_, _) => await CheckForUpdate();
         updateTimer.Start();
@@ -159,6 +161,45 @@ sealed class TrayApp : ApplicationContext
             imagesItem.Checked = value;
             Changed();
         }
+    }
+
+    /// <summary>"system", "light" or "dark". The window is built again in the new colors, with Settings still open.</summary>
+    public string Theme
+    {
+        get => Settings.Theme;
+        set
+        {
+            if (Settings.Theme == value) return;
+            Settings.Theme = value;
+            Settings.Save();
+            ApplyTheme(fromSettings: true);
+        }
+    }
+
+    void ApplyTheme(bool fromSettings)
+    {
+        bool wasDark = Chart.Dark;
+        Chart.Apply(Settings.Theme);
+        if (Chart.Dark == wasDark || window is null || window.IsDisposed)
+        {
+            window?.Render();   // the chips show the new choice
+            return;
+        }
+        // Controls keep the colors they were made with, so a new window is simpler than repainting each one.
+        bool visible = window.Visible;
+        var at = window.Location;
+        window.Dispose();
+        window = new MainWindow(this);
+        if (!visible) return;
+        ShowWindow();
+        window.Location = at;
+        if (fromSettings) window.ShowSettings();
+    }
+
+    /// <summary>Follows Windows when it switches between light and dark apps, while the theme is "system".</summary>
+    void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category == UserPreferenceCategory.General && Settings.Theme == "system") ui.Post(_ => ApplyTheme(fromSettings: false), null);
     }
 
     public bool StartWithWindows    {
@@ -390,6 +431,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     public async Task SendFiles(IEnumerable<string> paths)
     {
         ShowWindow();   // the window shows the progress
+        window?.ShowLogbook();
         foreach (string path in paths) await SendFile(path);
     }
 
@@ -455,7 +497,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         window?.Invalidate();
     }
 
-    async void PickFiles()
+    public async void PickFiles()
     {
         using var dialog = new OpenFileDialog { Title = "Send to the phone", Multiselect = true };
         if (dialog.ShowDialog() == DialogResult.OK) await SendFiles(dialog.FileNames);
@@ -576,7 +618,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         name = name.Trim();
         Settings.Peer = name.Length == 0 ? "your phone" : name[..Math.Min(name.Length, 40)];
         Settings.Save();
-        window?.HidePairing();
+        window?.ShowLogbook();
         Popup("Phone paired", $"{Settings.Peer} is now linked to this laptop. Your text is encrypted.", ToolTipIcon.Info, ShowWindow);
         Changed();
     }
@@ -635,6 +677,16 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         Changed();
     }
 
+    /// <summary>The newer version found by the last check, or null.</summary>
+    public (string Version, string Url)? Update => update;
+
+    /// <summary>"Check for updates" in Settings. Returns the line to show under it.</summary>
+    public async Task<string> CheckNow()
+    {
+        await CheckForUpdate();
+        return update is { } u ? $"Ferry {u.Version} is ready. Click Update to Ferry {u.Version} above." : "Ferry found no newer version.";
+    }
+
     async Task CheckForUpdate()
     {
         var found = await Updater.Check();
@@ -645,7 +697,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         Popup($"Ferry {found.Value.Version} is ready", "Click to update. Ferry restarts by itself; your pairing stays.", ToolTipIcon.Info, InstallUpdate);
     }
 
-    async void InstallUpdate()
+    public async void InstallUpdate()
     {
         if (update is not { } u) return;
         updateItem.Enabled = false;
@@ -677,6 +729,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         updateTimer.Stop();
         NetworkChange.NetworkAddressChanged -= OnNetworkChanged;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         sync.Stop();
         watcher.Dispose();
         window?.Dispose();

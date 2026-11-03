@@ -56,8 +56,8 @@ If the scanner does not open, tap **Type the code** on the phone. Then type the 
 
 After pairing, do these steps on the phone:
 
-1. Tap **Allow background use**. Without it, Android cuts the connection when the phone sleeps.
-2. On a Xiaomi, Redmi or POCO phone, open **Settings > Apps > Ferry** and turn on **Autostart**.
+1. Tap **Allow background use**. Without it, Android cuts the connection when the phone sleeps. This step is also in Ferry under **Settings > Keep Ferry running**.
+2. On a Xiaomi, Redmi or POCO phone, open Ferry **Settings**, then tap **Open app settings** and turn on **Autostart**.
 3. In Ferry Auto: turn on automatic sending (see [Ferry Auto](#ferry-auto-automatic-sending)).
 4. Optional: add the **Send clipboard** tile to the quick settings panel.
 
@@ -74,7 +74,7 @@ After pairing, do these steps on the phone:
 When text arrives, the other device shows it:
 
 - On the phone, a notification without sound shows the text for 8 seconds.
-- On the laptop, a pop-up shows the text. To stop the pop-ups, turn off the **Pop-ups** chip in the window, or clear **Show pop-ups** in the tray menu.
+- On the laptop, a pop-up shows the text. To stop the pop-ups, turn off **Pop-ups** in Settings in the window, or clear **Show pop-ups** in the tray menu.
 - If the text is one web link, the notice offers to open it. On the phone, tap the notification or **Open link**. On the laptop, click the pop-up. Ferry never opens a link by itself, and it only opens web links (http and https).
 
 ### What the screen shows
@@ -89,9 +89,15 @@ The pill in the top-right corner of the chart shows the connection:
 - **Adrift** (red dot): offline. Ferry tries again every 5 seconds. When the device changes network or wakes from sleep, Ferry connects again at once.
 - **Connecting**, **Paused** or **Not paired** (grey dot).
 
-The switches are chips under the logbook: a filled chip is on, an outlined chip is off.
+The main screen shows only the chart, the last crossing and the logbook. On the phone it also shows **Send clipboard**, and on the laptop **Send a file…**. When something needs action, one notice shows under it, for example an update or background use.
 
-Both apps follow the light or dark setting of the device. Light mode is a day chart (pale blue water). Dark mode is a soft charcoal night chart.
+Everything that you set once is in **Settings**. To open it, click or tap the round button with three sliders, right of the pill. In the Settings of each app:
+
+- **Appearance**: **System**, **Light** or **Dark**. Light is a day chart (pale blue water). Dark is a soft charcoal night chart. System follows the light or dark mode of the device. Each device keeps its own choice.
+- **Syncing**: images, screenshots and automatic sending on the phone. Pause, pop-ups, images and Start with Windows on the laptop. A filled chip is on, an outlined chip is off.
+- **Pairing**: the paired device, **Unpair** on the phone, and **Show pairing code** and **Reset pairing** on the laptop.
+- **Keep Ferry running** (phone): background use, and Autostart on Xiaomi phones.
+- **About**: the version, and **Check for updates**.
 
 If a device is offline for a short time, it gets the missed copies when it connects again. A copy that is more than 10 minutes old goes into the history only. It does not replace what is in your clipboard now.
 
@@ -137,13 +143,13 @@ Ferry moves images too. Images are encrypted the same way as text.
 | Laptop to phone | Copy an image, or take a screenshot with **Win+Shift+S** or **PrtScn**. It goes into the phone clipboard and into **Pictures/Ferry** on the phone. |
 | Phone to laptop, a copied image | Copy the image (for example **Copy image** in Chrome). Ferry Auto sends it by itself. In Ferry, tap **Send clipboard**. |
 | Phone to laptop, any image | Tap **Share** and choose **Send to laptop**. |
-| Phone to laptop, screenshots | Turn on the **Screenshots** chip in Ferry (see below). |
+| Phone to laptop, screenshots | Turn on **Send screenshots** in Ferry Settings (see below). |
 
 On the laptop, an image from the phone goes into the clipboard (press **Ctrl+V** to paste) and into **Pictures\Ferry**.
 
-The **Screenshots** chip is off until you turn it on, because screenshots can show private things. When you turn it on, Android asks for the Photos permission. Choose **Allow all**: with "Allow limited access", Ferry cannot see new screenshots.
+**Send screenshots** is off until you turn it on, because screenshots can show private things. When you turn it on, Android asks for the Photos permission. Choose **Allow all**: with "Allow limited access", Ferry cannot see new screenshots.
 
-To stop images in either direction, turn off the **Images** chip in Ferry on the phone or in the laptop window. On the laptop, **Send and receive images** in the tray menu does the same.
+To stop images in either direction, turn off **Images** in Ferry Settings on the phone or in the laptop window. On the laptop, **Send and receive images** in the tray menu does the same.
 
 Limits for images:
 
@@ -196,8 +202,8 @@ Your pairing and history stay after an update.
 - Text is encrypted end to end. ntfy.sh stores encrypted copies for up to 12 hours, so a device that was offline can catch up. ntfy.sh cannot read them.
 - ntfy.sh can see when a message is sent, how large it is, and which device type sent it.
 - The pairing code is the only secret. A person who has the code can read your clipboard text and send text to it. Do not share the code or the QR code.
-- If the code leaks, click **Reset pairing** in the laptop window. Then scan the new code with the phone.
-- When you unpair on one device, the other device unpairs too: **Reset pairing** on the laptop, or **Unpair** on the phone. The device that unpairs must be online to tell the other one. After an unpair, the laptop shows a new code to scan.
+- If the code leaks, click **Reset pairing** in Settings in the laptop window. Then scan the new code with the phone.
+- When you unpair on one device, the other device unpairs too: **Reset pairing** on the laptop, or **Unpair** in Settings on the phone. The device that unpairs must be online to tell the other one. After an unpair, the laptop shows a new code to scan.
 - On the laptop, Ferry does not send copies that apps mark as private or as "do not share to other devices" (password managers do this).
 - On the phone, Ferry Auto does not send copies that apps mark as sensitive (password managers do this on Android 13 and later). If you tap **Send clipboard** yourself, Ferry sends the copy, because you chose to.
 - The history stays on each device, in storage that only Ferry (phone) or your Windows user (laptop) can read. **Clear** removes it.
@@ -214,7 +220,7 @@ Your pairing and history stay after an update.
 
 **The light is red.** Make sure that the device is online. Ferry connects again by itself.
 
-**Laptop copies stop arriving on the phone.** Open Ferry on the phone. If a "Keep the link open" card shows, tap **Allow background use**. On a Xiaomi phone, also turn on Autostart.
+**Laptop copies stop arriving on the phone.** Open Ferry on the phone. If a "Keep the link open" notice shows, tap **Allow background use**. On a Xiaomi phone, also turn on Autostart (see **Settings > Keep Ferry running**).
 
 **Automatic sending stopped.** Some phones turn off accessibility services to save power. Open Ferry and look at the "Send copies automatically" card. If it says **Turn on**, turn it on again.
 

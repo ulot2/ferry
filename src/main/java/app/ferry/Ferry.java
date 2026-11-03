@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
+import android.content.res.Configuration;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -98,6 +99,27 @@ final class Ferry {
     static void forget(Context c) {
         c.stopService(new Intent(c, SyncService.class));
         prefs(c).edit().clear().apply();
+    }
+
+    /** "system" (follow Android), "light" or "dark". Kept in its own file, so pairing and Unpair (which clear prefs) keep it. */
+    static String theme(Context c) {
+        return c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("theme", "system");
+    }
+
+    static void setTheme(Context c, String theme) {
+        c.getSharedPreferences("look", Context.MODE_PRIVATE).edit().putString("theme", theme).apply();
+    }
+
+    /**
+     * Each screen calls this from attachBaseContext. Light or dark overrides only the night bit of the
+     * configuration, so values-night and the status-bar icons follow the choice. Null means: follow Android.
+     */
+    static Configuration themeOverride(Context c) {
+        String theme = theme(c);
+        if (theme.equals("system")) return null;
+        Configuration o = new Configuration();   // all fields unset, so nothing else is overridden
+        o.uiMode = theme.equals("dark") ? Configuration.UI_MODE_NIGHT_YES : Configuration.UI_MODE_NIGHT_NO;
+        return o;
     }
 
     static void status(Context c, String status) {

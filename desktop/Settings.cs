@@ -16,6 +16,7 @@ sealed class Settings
     public bool Paused { get; set; }
     public bool Popups { get; set; } = true;
     public bool Images { get; set; } = true;
+    public string Theme { get; set; } = "system";   // "system" (follow Windows), "light" or "dark"
     public string LastId { get; set; } = "";   // last ntfy.sh message seen, so a restart catches up on what it missed
     public List<Crossing> History { get; set; } = [];   // newest first
 

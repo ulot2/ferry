@@ -39,6 +39,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Settings" />
+
         <!-- Invisible: reads the clipboard (or shared/selected text) and sends it to the laptop. -->
         <activity
             android:name=".SendActivity"

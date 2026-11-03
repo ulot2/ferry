@@ -3,7 +3,7 @@
 One world for the Android app and the Windows tray app, chosen by the owner from four directions
 (Departure board, Nautical chart, Boarding pass, Native) on the "Ferry redesign options" canvas.
 It replaces the earlier "Harbor" design. Light mode is the day chart; dark mode is a soft charcoal
-night chart (the owner first chose pure black, then asked for something easier on the eyes). Each app follows the system light/dark setting.
+night chart (the owner first chose pure black, then asked for something easier on the eyes). Each app follows the system light/dark setting unless you choose Light or Dark in Settings > Appearance.
 
 ## Idea
 Ferry draws your two devices as two harbors on a sea chart, joined by a magenta course line: the
@@ -54,8 +54,10 @@ paired device) and the course time. Status sits on the chart as a pill (dot + "S
 - Primary button: Act fill, white Barlow Bold 17sp, full pill, 52dp tall. One per screen.
 - Chips (toggles): pill, 44dp tall; on = Chip on fill; off = Chip off outline with ink text.
 - Logbook rows: time (Bold) · arrow (course color; → toward the phone, ← toward the laptop) · item, separated by row rules. Tap (phone) or double-click / Enter (laptop) copies again.
-- Notices (update ready, automatic sending, battery, Xiaomi autostart, pairing): an outlined box (1dp section rule, 12dp corners) with a Medium title, body in ink muted, and one action. No colored side borders.
-- Links ("Show pairing code", "Reset pairing", "Unpair", "Clear"): course color text, no fill.
+- Notices (update ready, battery, automatic sending in Ferry Auto, pairing): at most one on the main screen, the most urgent first. Each is an outlined box (1dp section rule, 12dp corners) with a Medium title, body in ink muted, and one action. No colored side borders.
+- Links ("Show pairing code", "Reset pairing", "Clear", "Done"): course color text, no fill.
+- Settings button: a round pill (Pill color) on the chart, right of the status pill, with three sliders in ink. The same icon on both apps.
+- Settings screen: section names in the kicker style (APPEARANCE, SYNCING, PAIRING, KEEP FERRY RUNNING on the phone, ABOUT). Theme choice and laptop switches are chips; phone switches are switch rows (label left, switch right, course color when on) with a short hint under each.
 
 ## Layout
 - Android: edge-to-edge; the chart (240dp plus the status-bar inset) runs under the status bar. 20dp side margins, 16dp between blocks.

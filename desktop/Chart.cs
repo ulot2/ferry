@@ -9,28 +9,34 @@ namespace Ferry;
 /// <summary>The Nautical chart palette (day, and a soft charcoal night chart), the Barlow font, and drawing helpers. See DESIGN.md.</summary>
 static class Chart
 {
-    public static readonly bool Dark = Registry.GetValue(
+    /// <summary>True for the night chart. Set by Apply; the colors below follow it.</summary>
+    public static bool Dark { get; private set; } = SystemDark();
+
+    /// <summary>The theme from Settings: "light", "dark", or "system" (follow the Windows app mode). Open windows must be rebuilt.</summary>
+    public static void Apply(string theme) => Dark = theme switch { "dark" => true, "light" => false, _ => SystemDark() };
+
+    static bool SystemDark() => Registry.GetValue(
         @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1) is 0;
 
-    public static readonly Color Water = Dark ? Hex(0x1C2127) : Hex(0xDCEBF2);
-    public static readonly Color Contour1 = Dark ? Hex(0x2C333B) : Hex(0xB9D6E4);
-    public static readonly Color Contour2 = Dark ? Hex(0x252B32) : Hex(0xC8DFEA);
-    public static readonly Color Land = Dark ? Hex(0x26251F) : Hex(0xE9E1CC);
-    public static readonly Color Ground = Dark ? Hex(0x16191D) : Hex(0xF2F6F8);
-    public static readonly Color Ink = Dark ? Hex(0xDDE2E6) : Hex(0x0F2A44);
-    public static readonly Color InkMuted = Dark ? Hex(0xA0A9B2) : Hex(0x3D5A73);
-    public static readonly Color Course = Dark ? Hex(0xE05AA0) : Hex(0xA3125F);
-    public static readonly Color Act = Dark ? Hex(0xC2297A) : Hex(0xA3125F);
-    public static readonly Color ActPressed = Dark ? Hex(0xA3125F) : Hex(0x7A0D47);
-    public static readonly Color Rule = Dark ? Hex(0x2F363E) : Hex(0xC9D9E2);
-    public static readonly Color RuleRow = Dark ? Hex(0x232930) : Hex(0xDCE6EC);
-    public static readonly Color ChipOn = Dark ? Hex(0xDDE2E6) : Hex(0x0F2A44);
-    public static readonly Color ChipOnText = Dark ? Hex(0x16191D) : Hex(0xF2F6F8);
-    public static readonly Color ChipOff = Dark ? Hex(0x47505A) : Hex(0x9DB2C2);
-    public static readonly Color Pill = Dark ? Hex(0x16191D) : Hex(0xF2F6F8);
-    public static readonly Color Steady = Dark ? Hex(0x4CC38A) : Hex(0x1E8E5A);
-    public static readonly Color Adrift = Dark ? Hex(0xF2B8B5) : Hex(0xB3261E);
-    public static readonly Color Hover = Dark ? Hex(0x222830) : Hex(0xE3ECF1);
+    public static Color Water => Dark ? Hex(0x1C2127) : Hex(0xDCEBF2);
+    public static Color Contour1 => Dark ? Hex(0x2C333B) : Hex(0xB9D6E4);
+    public static Color Contour2 => Dark ? Hex(0x252B32) : Hex(0xC8DFEA);
+    public static Color Land => Dark ? Hex(0x26251F) : Hex(0xE9E1CC);
+    public static Color Ground => Dark ? Hex(0x16191D) : Hex(0xF2F6F8);
+    public static Color Ink => Dark ? Hex(0xDDE2E6) : Hex(0x0F2A44);
+    public static Color InkMuted => Dark ? Hex(0xA0A9B2) : Hex(0x3D5A73);
+    public static Color Course => Dark ? Hex(0xE05AA0) : Hex(0xA3125F);
+    public static Color Act => Dark ? Hex(0xC2297A) : Hex(0xA3125F);
+    public static Color ActPressed => Dark ? Hex(0xA3125F) : Hex(0x7A0D47);
+    public static Color Rule => Dark ? Hex(0x2F363E) : Hex(0xC9D9E2);
+    public static Color RuleRow => Dark ? Hex(0x232930) : Hex(0xDCE6EC);
+    public static Color ChipOn => Dark ? Hex(0xDDE2E6) : Hex(0x0F2A44);
+    public static Color ChipOnText => Dark ? Hex(0x16191D) : Hex(0xF2F6F8);
+    public static Color ChipOff => Dark ? Hex(0x47505A) : Hex(0x9DB2C2);
+    public static Color Pill => Dark ? Hex(0x16191D) : Hex(0xF2F6F8);
+    public static Color Steady => Dark ? Hex(0x4CC38A) : Hex(0x1E8E5A);
+    public static Color Adrift => Dark ? Hex(0xF2B8B5) : Hex(0xB3261E);
+    public static Color Hover => Dark ? Hex(0x222830) : Hex(0xE3ECF1);
 
     // The tray and window icon keep the day chart in both themes, like the phone's launcher icon.
     static readonly Color IconWater = Hex(0xDCEBF2), IconInk = Hex(0x0F2A44), IconCourse = Hex(0xA3125F);
@@ -191,9 +197,9 @@ static class Chart
     [DllImport("gdi32.dll")] static extern IntPtr AddFontMemResourceEx(IntPtr font, uint length, IntPtr reserved, ref uint fonts);
 }
 
-enum PillKind { Primary, Chip, Link }
+enum PillKind { Primary, Chip, Link, Settings }
 
-/// <summary>Chart button: magenta primary pill, an on/off chip (filled when on), or a link in the course color.</summary>
+/// <summary>Chart button: magenta primary pill, an on/off chip (filled when on), a link in the course color, or the round settings button on the chart.</summary>
 sealed class PillButton : Button
 {
     readonly PillKind kind;
@@ -205,7 +211,7 @@ sealed class PillButton : Button
         Text = text;
         Cursor = Cursors.Hand;
         FlatStyle = FlatStyle.Flat;
-        BackColor = Chart.Ground;
+        BackColor = kind == PillKind.Settings ? Chart.Water : Chart.Ground;   // the settings button sits on the chart band
         Font = Chart.Font("Barlow", kind == PillKind.Primary ? 10.5f : 9.75f, kind == PillKind.Primary ? FontStyle.Bold : FontStyle.Regular);
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         if (kind == PillKind.Chip) AccessibleRole = AccessibleRole.CheckButton;
@@ -261,9 +267,21 @@ sealed class PillButton : Button
                 align = TextFormatFlags.Left;   // links read as text, in line with the text above
                 bounds = Rectangle.FromLTRB((int)(10 * s), 0, Width, Height);
                 break;
+            case PillKind.Settings:
+                // Three sliders in ink on a round pill, the same icon as on the phone. Text is only the accessible name.
+                using (var fill = new SolidBrush(hover || down ? Chart.Hover : Chart.Pill)) g.FillPath(fill, pill);
+                float u = Math.Min(r.Width, r.Height) / 24f, cx = r.X + r.Width / 2, cy = r.Y + r.Height / 2;
+                using (var ink = new SolidBrush(Chart.Ink))
+                    foreach (var (dy, knob) in new[] { (-4.5f, 2f), (0f, -2.5f), (4.5f, 1f) })
+                    {
+                        g.FillRectangle(ink, cx - 6.5f * u, cy + (dy - 0.6f) * u, 13 * u, 1.2f * u);
+                        g.FillEllipse(ink, cx + (knob - 1.9f) * u, cy + (dy - 1.9f) * u, 3.8f * u, 3.8f * u);
+                    }
+                break;
         }
         if (!Enabled) text = Chart.InkMuted;
-        TextRenderer.DrawText(g, Text, Font, bounds, text, align | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+        if (kind != PillKind.Settings)
+            TextRenderer.DrawText(g, Text, Font, bounds, text, align | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
 
         if (Focused && ShowFocusCues)
         {
