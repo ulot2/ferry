@@ -1,7 +1,9 @@
 using System.IO.Pipes;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
@@ -37,8 +39,9 @@ sealed class TrayApp : ApplicationContext
     public Settings Settings { get; }
     public LinkState State { get; private set; } = LinkState.Connecting;
     public Crossing? LastCrossing => Settings.History.FirstOrDefault();
-    /// <summary>The file on its way to the phone, its size, and the part sent (0 to 1); null when no file is being sent.</summary>
-    public (string Name, long Bytes, double Done)? Sending { get; private set; }
+    /// <summary>The file on its way, its size (-1 when unknown), the part done (0 to 1), and its direction; null when no file is crossing.</summary>
+    // ponytail: one bar; a send and a receive at the same time share it
+    public (string Name, long Bytes, double Done, bool ToPhone)? Transfer { get; private set; }
 
     public TrayApp(EventWaitHandle show, string[] files)
     {
@@ -88,7 +91,9 @@ sealed class TrayApp : ApplicationContext
         sync.StateChanged += s => ui.Post(_ => { State = s; Changed(); if (s == LinkState.Connected) SendPending(); }, null);
         sync.TextReceived += (t, at) => ui.Post(_ => Apply(t, at), null);
         sync.ImageReceived += (image, at) => ui.Post(_ => ApplyImage(image, at), null);
-        sync.FileReceived += (name, contents, at) => ui.Post(_ => ApplyFile(name, contents, at), null);
+        sync.FileReceived += (name, path, at) => ui.Post(_ => ApplyFile(name, path, at), null);
+        sync.FileComing += (name, bytes, at) => ui.Post(_ => FileComing(name, bytes, at), null);
+        sync.FileOffered += (offer, at) => ui.Post(_ => ReceiveDirect(offer, at), null);
         sync.PhonePaired += name => ui.Post(_ => Paired(name), null);
         sync.PhoneUnpaired += () => ui.Post(_ => PhoneUnpaired(), null);
         sync.MessageSeen += id => ui.Post(_ => { Settings.LastId = id; Settings.Save(); }, null);
@@ -432,8 +437,19 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     {
         ShowWindow();   // the window shows the progress
         window?.ShowLogbook();
-        foreach (string path in paths) await SendFile(path);
+        // One file at a time, also across two Send to clicks: the phone puts parts together in the order they come.
+        await sending.WaitAsync();
+        try
+        {
+            foreach (string path in paths) await SendFile(path);
+        }
+        finally
+        {
+            sending.Release();
+        }
     }
+
+    readonly SemaphoreSlim sending = new(1, 1);
 
     async Task SendFile(string path)
     {
@@ -444,25 +460,43 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
             Popup("File not sent", $"{name} is a folder, or it is gone. Ferry sends files only.", ToolTipIcon.Warning, ShowWindow);
             return;
         }
-        if (info.Length > Sync.MaxFileBytes)
-        {
-            Popup("File not sent", $"{name} is over 14 MB. Ferry cannot send files that large yet.", ToolTipIcon.Warning, ShowWindow);
-            return;
-        }
         bool over = false;   // a progress report can arrive after the send ends; it must not bring the bar back
         var progress = new Progress<double>(done =>
         {
-            if (over || Sending is not { } s || (int)(done * 100) == (int)(s.Done * 100)) return;
-            Sending = (name, info.Length, done);
-            ShowSending();
+            if (over || Transfer is not { } t || (int)(done * 100) == (int)(t.Done * 100)) return;
+            Transfer = (name, info.Length, done, true);
+            ShowTransfer();
         });
-        Sending = (name, info.Length, 0);
-        ShowSending();
+        Transfer = (name, info.Length, 0, true);
+        ShowTransfer();
         try
         {
-            await Sync.SendFile(Settings.Code, name, await File.ReadAllBytesAsync(path), progress);
+            // Straight over Wi-Fi when the phone is on the same network; otherwise through ntfy.sh, up to 90 MB.
+            bool direct;
+            try
+            {
+                direct = await Lan.Send(Settings.Code, path, progress);
+            }
+            catch (Exception e) when (e is IOException or SocketException or OperationCanceledException)
+            {
+                if (info.Length > Sync.MaxFileBytes)
+                {
+                    Popup("File not sent", $"{name} did not reach the phone: the Wi-Fi connection broke off. Send it again.", ToolTipIcon.Warning, ShowWindow);
+                    return;
+                }
+                direct = false;
+            }
+            if (!direct)
+            {
+                if (info.Length > Sync.MaxFileBytes)
+                {
+                    Popup("File not sent", $"{name} is over 90 MB. Ferry sends files that large only when the laptop and the phone are on the same Wi-Fi.", ToolTipIcon.Warning, ShowWindow);
+                    return;
+                }
+                await Sync.SendFile(Settings.Code, path, progress);
+            }
             over = true;
-            Sending = null;
+            Transfer = null;
             Crossed("Laptop → Phone", name, DateTime.Now, filePath: path);
             if (Settings.Popups) Popup("Sent to " + (Settings.Peer == "" ? "your phone" : Settings.Peer), name + "\nIn Downloads/Ferry on the phone.", ToolTipIcon.None, ShowWindow);
         }
@@ -483,16 +517,70 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
             if (!over)
             {
                 over = true;
-                Sending = null;
+                Transfer = null;
                 Changed();
             }
         }
     }
 
-    void ShowSending()
+    /// <summary>The phone offers a file straight over Wi-Fi. If the laptop cannot take it, it says so, and the phone uses ntfy.sh at once.</summary>
+    async void ReceiveDirect(JsonElement offer, DateTime at)
     {
-        if (Sending is not { } s) return;
-        string tip = $"Ferry · Sending {s.Name}, {(int)(s.Done * 100)}%";
+        string name = offer.TryGetProperty("name", out var n) ? n.GetString() ?? "file" : "file";
+        long size = offer.TryGetProperty("size", out var z) && z.TryGetInt64(out long b) ? b : -1;
+        FileComing(name, size, at);
+        bool over = false;
+        var progress = new Progress<double>(done =>
+        {
+            if (over || Transfer is not { } t || (int)(done * 100) == (int)(t.Done * 100)) return;
+            Transfer = (name, size, done, false);
+            ShowTransfer();
+        });
+        Transfer = (name, size, 0, false);
+        ShowTransfer();
+        string temp = "";
+        try
+        {
+            // Written next to where it ends up, so the move after is instant even for a large file.
+            string dir = Path.Combine(DownloadsFolder(), "Ferry");
+            Directory.CreateDirectory(dir);
+            temp = Path.Combine(dir, $"{Guid.NewGuid():N}.part");
+            if (await Lan.Receive(Settings.Code, offer, temp, progress))
+            {
+                over = true;
+                Transfer = null;
+                ApplyFile(name, temp, at);
+                return;
+            }
+        }
+        catch (Exception e) when (e is IOException or SocketException or OperationCanceledException or UnauthorizedAccessException)
+        {
+            // Broke off. The phone sees it too, and sends a file up to 90 MB through ntfy.sh.
+        }
+        finally
+        {
+            if (!over)
+            {
+                over = true;
+                Transfer = null;
+                Changed();
+            }
+        }
+        try { if (temp != "") File.Delete(temp); } catch (IOException) { }
+        try
+        {
+            await Sync.PostLan(Settings.Code, new { t = "nolan", id = offer.GetProperty("id").GetString() });
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            // Offline: the phone stops waiting by itself after 10 seconds.
+        }
+    }
+
+    void ShowTransfer()
+    {
+        if (Transfer is not { } t) return;
+        string tip = $"Ferry · {(t.ToPhone ? "Sending" : "Receiving")} {t.Name}, {(int)(t.Done * 100)}%";
         tray.Text = tip.Length > 127 ? tip[..127] : tip;
         window?.Invalidate();
     }
@@ -541,15 +629,24 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         }
     }
 
-    void ApplyFile(string name, byte[] contents, DateTime at)
+    /// <summary>The phone is about to send a file: say what is coming before it is all here.</summary>
+    void FileComing(string name, long bytes, DateTime at)
+    {
+        if (Settings.Popups && !Settings.Paused && DateTime.Now - at < TimeSpan.FromMinutes(10))
+            Popup("Coming from " + (Settings.Peer == "" ? "your phone" : Settings.Peer), (bytes < 0 ? name : $"{name}, {bytes / 1048576.0:0.0} MB") + "\nFerry saves it in Downloads\\Ferry.", ToolTipIcon.None, ShowWindow);
+    }
+
+    /// <summary>A file from the phone, in a temporary file that this moves to Downloads\Ferry.</summary>
+    void ApplyFile(string name, string temp, DateTime at)
     {
         string path;
         try
         {
-            path = SaveDownload(name, contents);
+            path = SaveDownload(name, temp);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            try { File.Delete(temp); } catch (IOException) { }
             Popup("File not saved", $"Ferry could not save {name} in Downloads\\Ferry.", ToolTipIcon.Warning, ShowWindow);
             return;
         }
@@ -560,13 +657,13 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     }
 
     /// <summary>Saves a file from the phone in Downloads\Ferry. It never overwrites: a second "a.pdf" becomes "a (2).pdf".</summary>
-    static string SaveDownload(string name, byte[] contents)
+    static string SaveDownload(string name, string temp)
     {
         string dir = Path.Combine(DownloadsFolder(), "Ferry");
         Directory.CreateDirectory(dir);
         string safe = SafeName(name), path = Path.Combine(dir, safe);
         for (int i = 2; File.Exists(path); i++) path = Path.Combine(dir, $"{Path.GetFileNameWithoutExtension(safe)} ({i}){Path.GetExtension(safe)}");
-        File.WriteAllBytes(path, contents);
+        File.Move(temp, path);
         // Mark the file as from the internet, as a browser does, so Windows warns before it runs a program or a macro in it.
         try
         {

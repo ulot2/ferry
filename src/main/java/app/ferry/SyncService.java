@@ -35,12 +35,18 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.function.IntConsumer;
 
 /** Keeps a connection to ntfy.sh open and puts whatever the laptop copies into this phone's clipboard. */
 public class SyncService extends Service {
@@ -55,6 +61,8 @@ public class SyncService extends Service {
     private ConnectivityManager.NetworkCallback netWatch;
     private Network network;
     private volatile boolean skipWait;   // a reconnect on purpose: no 5 s wait, no "Offline" in the notification
+    private String partId;   // the file whose parts are coming in, and the part expected next
+    private int partNext;
 
     static void start(Context c) {
         c.startForegroundService(new Intent(c, SyncService.class));
@@ -119,6 +127,18 @@ public class SyncService extends Service {
                     }
                     if (hasTag(m, "file")) {
                         receiveFile(code, m);
+                        continue;
+                    }
+                    if (hasTag(m, "part")) {
+                        receivePart(code, m);
+                        continue;
+                    }
+                    if (hasTag(m, "incoming")) {
+                        announceIncoming(code, m);
+                        continue;
+                    }
+                    if (hasTag(m, "lan")) {
+                        lanMessage(code, m);
                         continue;
                     }
                     String sealed = m.has("attachment") ? fetchText(m.getJSONObject("attachment")) : m.optString("message");
@@ -222,18 +242,134 @@ public class SyncService extends Service {
             byte[] sealed = fetchSealed(m);
             Crypto.SealedFile file = sealed == null ? null : Crypto.openFile(code, sealed);
             if (file == null) return;   // not from our laptop
-            long at = m.optLong("time", System.currentTimeMillis() / 1000) * 1000;
-            Uri saved = Ferry.saveDownload(this, file.name, file.contents);
-            String name = Ferry.displayName(this, saved);   // Android adds " (1)" when the name is taken
-            Ferry.crossedFile(this, Ferry.TO_PHONE, name, at, saved.toString());
-            if (System.currentTimeMillis() - at < 10 * 60_000) {
-                String peer = Ferry.prefs(this).getString("peer", "");
-                PendingIntent open = PendingIntent.getActivity(this, 4, Ferry.viewFile(this, saved), PendingIntent.FLAG_IMMUTABLE);
-                notifyCrossing("File from " + (peer.isEmpty() ? "your laptop" : peer), name + ", in Downloads/Ferry", null, open, "Open");
-            }
+            landed(file.name, Ferry.from(new ByteArrayInputStream(file.contents)), time(m));
         } catch (Exception e) {
             Log.w("Ferry", "file not received: " + e);
         }
+    }
+
+    /**
+     * One part of a file over 14 MB. Parts come in order, so each one is added to a file in the cache,
+     * and the last one moves it to Downloads/Ferry. A missing part drops the whole file.
+     * ponytail: one file at a time and kept in memory only; a restart of Ferry in the middle drops that file.
+     */
+    private void receivePart(String code, JSONObject m) {
+        try {
+            byte[] sealed = fetchSealed(m);
+            Crypto.Part part = sealed == null ? null : Crypto.openPart(code, sealed);
+            if (part == null) return;   // not from our laptop
+            File file = new File(getCacheDir(), "incoming.part");
+            if (part.index == 0) {
+                partId = part.id;
+                partNext = 0;
+            }
+            if (!part.id.equals(partId) || part.index != partNext) {
+                Log.w("Ferry", "file part missing: " + part.name + " dropped");
+                partId = null;
+                //noinspection ResultOfMethodCallIgnored
+                file.delete();
+                return;
+            }
+            try (OutputStream out = new FileOutputStream(file, part.index > 0)) {
+                out.write(part.contents);
+            }
+            if (++partNext < part.count) return;
+            partId = null;
+            try (InputStream in = new FileInputStream(file)) {
+                landed(part.name, Ferry.from(in), time(m));
+            } finally {
+                //noinspection ResultOfMethodCallIgnored
+                file.delete();
+            }
+        } catch (Exception e) {
+            Log.w("Ferry", "file part not received: " + e);
+        }
+    }
+
+    /**
+     * A message that sets up a direct Wi-Fi transfer. "request": the laptop wants to send a file.
+     * "nolan": the laptop cannot connect to the file this phone offered, so the phone uses ntfy.sh at once.
+     * Older messages are replays after a reconnect: the other side stopped waiting long ago.
+     */
+    private void lanMessage(String code, JSONObject m) {
+        String json = Crypto.openLan(code, m.optString("message"));
+        if (json == null || System.currentTimeMillis() - time(m) > 2 * 60_000) return;
+        try {
+            JSONObject lan = new JSONObject(json);
+            String type = lan.optString("t");
+            if (type.equals("nolan")) Lan.cancel(lan.optString("id"));
+            else if (type.equals("request")) new Thread(() -> receiveDirect(code, lan, time(m)), "ferry-lan").start();
+        } catch (org.json.JSONException e) {
+            Log.w("Ferry", "Wi-Fi message unreadable: " + e);
+        }
+    }
+
+    private static final int RECEIVING = 5;   // notification id of the bar of a file coming in
+
+    /**
+     * The laptop sends a file straight to this phone. The phone listens and tells the laptop where;
+     * with no Wi-Fi address it says so, and the laptop uses ntfy.sh. The file goes straight into Downloads/Ferry.
+     */
+    private void receiveDirect(String code, JSONObject request, long at) {
+        String key = request.optString("id"), name = request.optString("name", "file");
+        long size = request.optLong("size", -1);
+        byte[] id = Lan.unhex(key);
+        if (id == null) return;
+        java.util.List<String> ips = Lan.addresses(this);
+        try {
+            java.net.ServerSocket server = ips.isEmpty() ? null : Lan.listen(key);
+            Ferry.postLan(this, "accept", key, null, 0, server == null ? 0 : server.getLocalPort(), ips);
+            if (server == null) return;
+            java.net.Socket s = Lan.accept(server, key, code, id, 20_000);
+            if (s == null) return;
+            notifyCrossing("Coming from " + peer(), name + (size < 0 ? "" : ", " + String.format(Locale.ROOT, "%.1f MB", size / 1048576.0)), null);
+            IntConsumer bar = Ferry.throttled(percent -> Ferry.progress(this, RECEIVING, "Receiving " + name, size, percent));
+            try {
+                landed(name, out -> Lan.receive(s, code, id, out, size, bar), at);
+            } finally {
+                s.close();
+                getSystemService(NotificationManager.class).cancel(RECEIVING);
+            }
+        } catch (IOException e) {
+            Lan.cancel(key);   // the accept did not go out: stop listening
+            Log.w("Ferry", "Wi-Fi file not received: " + e);
+        }
+    }
+
+    private static long time(JSONObject m) {
+        return m.optLong("time", System.currentTimeMillis() / 1000) * 1000;
+    }
+
+    /** Saves a whole file in Downloads/Ferry, adds it to the history, and says so. */
+    private void landed(String name, Ferry.Contents contents, long at) throws IOException {
+        Uri saved = Ferry.saveDownload(this, name, contents);
+        String shown = Ferry.displayName(this, saved);   // Android adds " (1)" when the name is taken
+        Ferry.crossedFile(this, Ferry.TO_PHONE, shown, at, saved.toString());
+        if (System.currentTimeMillis() - at < 10 * 60_000) {
+            PendingIntent open = PendingIntent.getActivity(this, 4, Ferry.viewFile(this, saved), PendingIntent.FLAG_IMMUTABLE);
+            notifyCrossing("File from " + peer(), shown + ", in Downloads/Ferry", null, open, "Open");
+        }
+    }
+
+    /** The laptop is about to send a file: say what is coming before it is all here. */
+    private void announceIncoming(String code, JSONObject m) {
+        String notice = Crypto.openIncoming(code, m.optString("message"));
+        int nl = notice == null ? -1 : notice.indexOf('\n');
+        if (nl < 0) return;   // not from our laptop
+        long at = m.optLong("time", System.currentTimeMillis() / 1000) * 1000;
+        if (System.currentTimeMillis() - at > 10 * 60_000) return;   // the file itself says so when it lands
+        long bytes;
+        try {
+            bytes = Long.parseLong(notice.substring(0, nl));
+        } catch (NumberFormatException e) {
+            return;
+        }
+        notifyCrossing("Coming from " + peer(), notice.substring(nl + 1) + ", " + String.format(Locale.ROOT, "%.1f MB", bytes / 1048576.0), null);
+    }
+
+    private String peer() {
+        String peer = Ferry.prefs(this).getString("peer", "");
+        return peer.isEmpty() ? "your laptop" : peer;
     }
 
     /** Downloads a sealed attachment, only from ntfy.sh and only up to 16 MB. Returns null for anything else. */

@@ -1,6 +1,6 @@
 # Ferry
 
-Ferry moves clipboard text and images between a Windows laptop and an Android phone. It also sends files up to 14 MB when you choose to.
+Ferry moves clipboard text and images between a Windows laptop and an Android phone. It also sends files when you choose to: any size on the same Wi-Fi, and up to 90 MB from anywhere.
 
 When you copy text on the laptop, the text goes into the clipboard of the phone within a second or two. When you copy text on the phone, Ferry sends it to the laptop with one tap, or by itself in Ferry Auto. You do not need an account. The two devices pair when the phone scans a QR code, and all text is encrypted end to end (only your two devices can read it).
 
@@ -18,6 +18,8 @@ The QR code holds a pairing code: 26 random letters and numbers. Both devices ma
 - An encryption key. The key never leaves your devices.
 
 Each device encrypts the text with the key (AES-256-GCM) before it sends the text to the topic. ntfy.sh only sees encrypted text. Each device ignores messages that were not encrypted with your key.
+
+Files take a faster road when the two devices are on the same Wi-Fi. The phone opens a port on the Wi-Fi network and tells the laptop the address through ntfy.sh. The laptop then connects to the phone directly, and the file goes from device to device. Ferry encrypts the file with the same key, in parts of 1 MB. Because the laptop always makes the connection, Windows Firewall does not ask for permission.
 
 ## Install
 
@@ -160,18 +162,27 @@ Limits for images:
 
 ## Files
 
-Ferry sends other files too, up to 14 MB. Files are encrypted the same way as text, and the file name is encrypted too. Ferry never sends a file because you copied it. You send each file yourself.
+Ferry sends other files too, for example videos. Files are encrypted the same way as text, and the file name is encrypted too. Ferry never sends a file because you copied it. You send each file yourself.
+
+Ferry sends a file in one of two ways:
+
+- Direct: when the phone and the laptop are on the same Wi-Fi, the file goes straight from one device to the other. A file of any size can go this way. The speed depends on your Wi-Fi, often 20 to 80 MB per second. This also works when the laptop uses the phone's hotspot.
+- Through ntfy.sh: when the devices are on different networks, or when the direct connection fails, the file goes through ntfy.sh. This works for files up to 90 MB.
+
+Ferry tries the direct way first. If the other device does not answer within a few seconds, Ferry uses ntfy.sh.
 
 | To send | Do this |
 |---|---|
-| Laptop to phone, from File Explorer | Right-click the file, then choose **Send to > Ferry (phone)**. |
+| Laptop to phone, from File Explorer | Right-click the file, then choose **Send to > Ferry (phone)**. On Windows 11, **Send to** is under **Show more options**. |
 | Laptop to phone, from the Ferry window | Drag the file onto the window. |
 | Laptop to phone, from the tray | Click **Send a file to the phone…** in the tray menu, then choose the file. |
 | Phone to laptop | Tap **Share** on the file and choose **Send to laptop**. |
 
-You can send more than one file at a time on the laptop. On the phone, share one file at a time.
+You can send more than one file at a time on both devices. Ferry sends them one after the other. If you share several photos from the phone, they arrive as files in Downloads, not in the clipboard.
 
 While a file is sent, a bar shows how much of it is sent. On the laptop, the bar is in the Ferry window, which opens by itself. On the phone, the bar is in a notification.
+
+When a file starts to cross, the other device shows a pop-up with the name and size of the file. A large file takes a few minutes, so this pop-up tells you that it is on its way.
 
 When a file arrives:
 
@@ -181,12 +192,20 @@ When a file arrives:
 
 To use an earlier file again, find it in the logbook. On the laptop, double-click it to copy the file, then paste it in a folder or an email. On the phone, tap a file that came to the phone to open it.
 
-Limits for files:
+Limits for direct files:
 
-- Ferry does not send a file that is larger than 14 MB.
-- ntfy.sh keeps at most 100 MB of your files at a time, for 3 hours. If you send more, ntfy.sh refuses the file until older files expire.
+- Both devices must be on the same network. Some public and guest Wi-Fi networks stop devices from connecting to each other. On such a network, Ferry uses ntfy.sh.
+- If the Wi-Fi connection breaks while a file crosses, Ferry sends a file up to 90 MB again through ntfy.sh. Send a larger file again yourself.
+
+Limits for files through ntfy.sh:
+
+- Ferry does not send a file that is larger than 90 MB this way.
+- ntfy.sh takes one file of at most 15 MB. Ferry sends a larger file in parts of 14 MB, and the other device puts the parts together.
+- ntfy.sh keeps at most 100 MB of your files at a time, for 3 hours. If you send more, ntfy.sh refuses the file until older files expire. As a result, you can send one 90 MB file in 3 hours, but not two.
 - A device that is offline for more than 3 hours does not get the file.
 - A file that does not reach ntfy.sh does not wait. Send it again when you are online.
+- If Ferry restarts while a large file arrives, the other device does not get that file. Send it again.
+- A phone or laptop with an older Ferry gets files up to 14 MB only, and never directly. Update both apps.
 
 ## Updates
 
@@ -201,6 +220,7 @@ Your pairing and history stay after an update.
 
 - Text is encrypted end to end. ntfy.sh stores encrypted copies for up to 12 hours, so a device that was offline can catch up. ntfy.sh cannot read them.
 - ntfy.sh can see when a message is sent, how large it is, and which device type sent it.
+- A direct file crosses your own Wi-Fi, encrypted. Another device on the network can see that a transfer occurs, but it cannot read the file. The phone accepts a connection only from a device that has your pairing code.
 - The pairing code is the only secret. A person who has the code can read your clipboard text and send text to it. Do not share the code or the QR code.
 - If the code leaks, click **Reset pairing** in Settings in the laptop window. Then scan the new code with the phone.
 - When you unpair on one device, the other device unpairs too: **Reset pairing** on the laptop, or **Unpair** in Settings on the phone. The device that unpairs must be online to tell the other one. After an unpair, the laptop shows a new code to scan.
@@ -210,7 +230,8 @@ Your pairing and history stay after an update.
 
 ## Limits
 
-- Ferry sends files up to 14 MB. It does not send folders.
+- Ferry sends a file larger than 90 MB only when both devices are on the same Wi-Fi. It does not send folders.
+- Ferry is not in the Windows **Share** window. Use **Send to** (see Files).
 - ntfy.sh limits one message to 4,096 bytes. Ferry sends longer text as a text file, and the other device reads the file.
 - The QR scanner needs Google Play services. On a phone without them, type the code.
 

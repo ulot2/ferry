@@ -1,8 +1,6 @@
 package app.ferry;
 
 import android.app.Activity;
-import android.app.Notification;
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -10,12 +8,16 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.PersistableBundle;
-import android.os.SystemClock;
 import android.util.Log;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.Locale;
+import java.io.InputStream;
+import java.util.Collections;
+import java.util.List;
+import java.util.function.IntConsumer;
 
 /**
  * Invisible screen that sends to the laptop: shared or selected text or images if there are some,
@@ -33,6 +35,13 @@ public class SendActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         auto = getIntent().getBooleanExtra(EXTRA_AUTO, false);
+        if (Intent.ACTION_SEND_MULTIPLE.equals(getIntent().getAction())) {
+            // Several files, also several photos: they go as files, since the clipboard holds one image only.
+            List<Uri> uris = getIntent().getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            if (uris != null && !uris.isEmpty()) sendFiles(uris);
+            else done("Nothing to send");
+            return;
+        }
         String type = getIntent().getType();
         Object stream = getIntent().getParcelableExtra(Intent.EXTRA_STREAM);
         if (type != null && type.startsWith("image/") && stream instanceof Uri) {
@@ -40,7 +49,7 @@ public class SendActivity extends Activity {
             return;
         }
         if (stream instanceof Uri) {
-            sendFile((Uri) stream);   // any other shared file, also a .txt file
+            sendFiles(Collections.singletonList((Uri) stream));   // any other shared file, also a .txt file
             return;
         }
         CharSequence text = getIntent().getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
@@ -166,63 +175,98 @@ public class SendActivity extends Activity {
         }).start();
     }
 
-    /** A file shared with Ferry. Only Share sends files: Ferry never sends a file because it was copied. */
-    private void sendFile(Uri uri) {
+    /** Files shared with Ferry, sent one after the other. Only Share sends files: Ferry never sends a file because it was copied. */
+    private void sendFiles(List<Uri> uris) {
         started = true;
         if (!Ferry.paired(this)) {
             done("Open Ferry and pair it with your laptop first");
             return;
         }
-        String name = Ferry.displayName(this, uri);
-        Toast.makeText(getApplicationContext(), "Sending " + name + "…", Toast.LENGTH_SHORT).show();
+        String first = Ferry.displayName(this, uris.get(0));
+        Toast.makeText(getApplicationContext(), uris.size() == 1 ? "Sending " + first + "…" : "Sending " + uris.size() + " files…", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
-            String result;
-            try {
-                byte[] contents = Images.read(this, uri);   // null when unreadable or far too large
-                if (contents == null || contents.length > Ferry.MAX_FILE_BYTES) {
-                    result = name + " is over 14 MB. Ferry cannot send files that large yet.";
-                } else {
-                    try {
-                        progress(name, contents.length, 0);
-                        long[] shown = {0};   // when the bar last moved: Android drops updates that come too fast
-                        Ferry.sendFile(this, name, contents, "phone", percent -> {
-                            long now = SystemClock.uptimeMillis();
-                            if (now - shown[0] < 250) return;
-                            shown[0] = now;
-                            progress(name, contents.length, percent);
-                        });
-                        Ferry.crossedFile(this, Ferry.TO_LAPTOP, name, System.currentTimeMillis(), "");
-                        result = "Sent to laptop: " + name;
-                        Log.i("Ferry", "send screen: file sent");
-                    } catch (Ferry.LimitException e) {
-                        result = "ntfy.sh refused the file. It keeps at most 100 MB of your files at a time, for 3 hours. Try again later.";
-                    } catch (IOException e) {
-                        Log.w("Ferry", "send screen: file not sent: " + e);
-                        result = "File not sent. Ferry could not reach ntfy.sh. Try again when you are online.";
+            String failed = null;
+            int sent = 0;
+            // Open them all first: the permission to read shared files can end when this screen closes,
+            // but a file that is open stays readable. Files up to 90 MB are copied, so ntfy.sh can take them
+            // when Wi-Fi cannot. Larger files are read once, straight onto the Wi-Fi connection.
+            int count = uris.size();
+            String[] names = new String[count];
+            File[] staged = new File[count];
+            InputStream[] streams = new InputStream[count];
+            long[] sizes = new long[count];
+            for (int i = 0; i < count; i++) {
+                Uri uri = uris.get(i);
+                names[i] = Ferry.displayName(this, uri);
+                sizes[i] = Ferry.size(this, uri);
+                try {
+                    if (sizes[i] <= Ferry.MAX_FILE_BYTES) {
+                        try {
+                            staged[i] = Ferry.stage(this, uri);
+                            sizes[i] = staged[i].length();
+                            continue;
+                        } catch (Ferry.TooLargeException e) {
+                            // larger than the app said: read it once over Wi-Fi
+                        }
                     }
+                    streams[i] = getContentResolver().openInputStream(uri);
+                    if (streams[i] == null) throw new IOException("Cannot open " + uri);
+                } catch (IOException | SecurityException e) {
+                    Log.w("Ferry", "send screen: file unreadable: " + e);
+                    failed = "Ferry could not read " + names[i] + ".";
                 }
-            } catch (IOException | SecurityException e) {
-                Log.w("Ferry", "send screen: file unreadable: " + e);
-                result = "Ferry could not read that file";
+            }
+            // One send at a time, also across two shares: the laptop puts parts together in the order they come.
+            synchronized (SENDING) {
+                for (int i = 0; i < count; i++) {
+                    if (staged[i] == null && streams[i] == null) continue;
+                    String label = count == 1 ? names[i] : names[i] + " (" + (i + 1) + " of " + count + ")";
+                    String error = sendFile(names[i], staged[i], streams[i], sizes[i], label);
+                    if (error == null) sent++;
+                    else failed = error;
+                }
             }
             getSystemService(NotificationManager.class).cancel(PROGRESS);
-            String r = result;
+            String r = failed == null ? (uris.size() == 1 ? "Sent to laptop: " + first : "Sent " + sent + " files to laptop")
+                    : uris.size() == 1 ? failed : sent + " of " + uris.size() + " files sent. " + failed;
             runOnUiThread(() -> done(r));
         }).start();
     }
 
-    /** The "Sending" notification with a bar that fills as the file goes. It stays until the send ends. */
-    private void progress(String name, int bytes, int percent) {
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        nm.createNotificationChannel(new NotificationChannel("sending", "Sending files", NotificationManager.IMPORTANCE_LOW));
-        nm.notify(PROGRESS, new Notification.Builder(this, "sending")
-                .setSmallIcon(R.drawable.ic_tile)
-                .setContentTitle("Sending " + name)
-                .setContentText(percent + "% of " + String.format(Locale.ROOT, "%.1f MB", bytes / 1048576.0))
-                .setProgress(100, percent, false)
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .build());
+    private static final Object SENDING = new Object();
+
+    /**
+     * Sends one file: straight over Wi-Fi when the laptop can connect, otherwise through ntfy.sh (a staged copy only).
+     * Deletes the copy and closes the stream. Returns null when it is sent, or the reason when it is not.
+     */
+    private String sendFile(String name, File staged, InputStream stream, long size, String label) {
+        IntConsumer bar = Ferry.throttled(percent -> Ferry.progress(this, PROGRESS, "Sending " + label, size, percent));
+        try {
+            bar.accept(0);
+            boolean direct;
+            try (InputStream in = staged != null ? new FileInputStream(staged) : stream) {
+                direct = Lan.offer(this, name, in, size, bar);
+            } catch (IOException e) {
+                Log.w("Ferry", "send screen: Wi-Fi transfer broke off: " + e);
+                if (staged == null) return name + " not sent. The Wi-Fi connection to the laptop broke off. Try again.";
+                direct = false;
+            }
+            if (!direct) {
+                if (staged == null) return name + " is over 90 MB. Ferry sends files that large only when the phone and the laptop are on the same Wi-Fi.";
+                Ferry.sendFile(this, name, staged, "phone", bar);
+            }
+            Ferry.crossedFile(this, Ferry.TO_LAPTOP, name, System.currentTimeMillis(), "");
+            Log.i("Ferry", "send screen: file sent " + (direct ? "over Wi-Fi" : "through ntfy.sh"));
+            return null;
+        } catch (Ferry.LimitException e) {
+            return "ntfy.sh refused " + name + ". It keeps at most 100 MB of your files at a time, for 3 hours. Try again later.";
+        } catch (IOException e) {
+            Log.w("Ferry", "send screen: file not sent: " + e);
+            return name + " not sent. Ferry could not reach ntfy.sh. Try again when you are online.";
+        } finally {
+            //noinspection ResultOfMethodCallIgnored
+            if (staged != null) staged.delete();
+        }
     }
 
     private void done(String message) {

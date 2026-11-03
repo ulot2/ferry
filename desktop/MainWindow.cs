@@ -408,9 +408,9 @@ sealed class MainWindow : Form
         }
 
         // A file on its way takes the place of the last crossing: its name, then the course filling up as the file goes.
-        if (app.Sending is { } f)
+        if (app.Transfer is { } f)
         {
-            Chart.DrawTracked(g, "SENDING TO " + phone.ToUpperInvariant(), kicker, Chart.InkMuted, x, 166 * s, 1.2f * s);
+            Chart.DrawTracked(g, (f.ToPhone ? "SENDING TO " : "RECEIVING FROM ") + phone.ToUpperInvariant(), kicker, Chart.InkMuted, x, 166 * s, 1.2f * s);
             TextRenderer.DrawText(g, f.Name, crossing, new Rectangle((int)x, (int)(184 * s), (int)w, (int)(24 * s)), Chart.Ink,
                 TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
             var track = new RectangleF(x, 214 * s, w, 6 * s);
@@ -419,7 +419,7 @@ sealed class MainWindow : Form
             if (f.Done > 0)
                 using (var path = Chart.RoundRect(track with { Width = Math.Max(6 * s, w * (float)f.Done) }, 3 * s))
                 using (var fill = new SolidBrush(Chart.Course)) g.FillPath(fill, path);
-            TextRenderer.DrawText(g, $"{(int)(f.Done * 100)}% of {f.Bytes / 1048576.0:0.0} MB", small, new Point((int)x, (int)(224 * s)), Chart.InkMuted);
+            TextRenderer.DrawText(g, f.Bytes < 0 ? $"{(int)(f.Done * 100)}%" : $"{(int)(f.Done * 100)}% of {f.Bytes / 1048576.0:0.0} MB", small, new Point((int)x, (int)(224 * s)), Chart.InkMuted);
         }
         else
         {

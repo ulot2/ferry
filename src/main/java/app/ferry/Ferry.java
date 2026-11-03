@@ -1,6 +1,9 @@
 package app.ferry;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -11,6 +14,7 @@ import android.content.res.Configuration;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
@@ -22,6 +26,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -233,12 +241,30 @@ final class Ferry {
     }
 
     private static void send(String code, String text, String tags) throws IOException {
-        String body;
         try {
-            body = Crypto.seal(code, text);
+            post(code, Crypto.seal(code, text), tags);
         } catch (GeneralSecurityException e) {
             throw new IOException(e);
         }
+    }
+
+    /**
+     * A message that sets up a direct Wi-Fi transfer: "offer" (this phone sends; port and ips set),
+     * or "accept" (the laptop sends; ips empty when this phone is not on Wi-Fi). size is -1 when unknown.
+     */
+    static void postLan(Context c, String type, String id, String name, long size, int port, java.util.List<String> ips) throws IOException {
+        String code = code(c);
+        if (code.isEmpty()) throw new IOException("Not paired");
+        try {
+            JSONObject m = new JSONObject().put("t", type).put("id", id).put("port", port).put("ips", new JSONArray(ips));
+            if (name != null) m.put("name", name).put("size", size);
+            post(code, Crypto.sealLan(code, m.toString()), "phone,lan");
+        } catch (JSONException | GeneralSecurityException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private static void post(String code, String body, String tags) throws IOException {
         // ntfy.sh turns bodies over 4 KB into a text file by itself; the laptop reads both.
         HttpURLConnection con = (HttpURLConnection) new URL(SERVER + Crypto.topic(code)).openConnection();
         try {
@@ -257,8 +283,10 @@ final class Ferry {
         }
     }
 
-    /** ntfy.sh takes files up to 15 MB. The name and the encryption add a few hundred bytes. */
-    static final int MAX_FILE_BYTES = 14 * 1024 * 1024;
+    /** ntfy.sh takes attachments up to 15 MB. The name and the encryption add a few hundred bytes. */
+    static final int PART_BYTES = 14 * 1024 * 1024;
+    /** Larger files go in parts. ntfy.sh keeps at most 100 MB of one sender's files at a time, so 90 MB leaves room. */
+    static final long MAX_FILE_BYTES = 90L * 1024 * 1024;
 
     /** ntfy.sh refused a file: too large, or over its 100 MB of files per user. */
     static final class LimitException extends IOException {
@@ -279,17 +307,58 @@ final class Ferry {
     }
 
     /**
-     * Encrypts and sends a file with its name. ntfy.sh only sees "file.ferry" and the size.
+     * Encrypts and sends a file with its name. ntfy.sh only sees "file.ferry" or "part.ferry" and the size.
+     * First a short notice tells the laptop what is coming. A file over 14 MB goes in 14 MB parts.
      * Reports the percent sent to progress. Blocks; call it off the main thread.
      */
-    static void sendFile(Context c, String name, byte[] contents, String tags, IntConsumer progress) throws IOException {
+    static void sendFile(Context c, String name, File file, String tags, IntConsumer progress) throws IOException {
         String code = code(c);
         if (code.isEmpty()) throw new IOException("Not paired");
-        try {
-            put(code, Crypto.sealFile(code, name, contents), tags, "file", progress);
+        long size = file.length();
+        int count = (int) Math.max(1, (size + PART_BYTES - 1) / PART_BYTES);
+        try (DataInputStream in = new DataInputStream(new FileInputStream(file))) {
+            post(code, Crypto.sealIncoming(code, size, name), tags + ",incoming");
+            byte[] id = Crypto.newId();
+            for (int i = 0; i < count; i++) {
+                byte[] part = new byte[(int) Math.min(PART_BYTES, size - (long) i * PART_BYTES)];
+                in.readFully(part);
+                int done = i;
+                IntConsumer partProgress = percent -> progress.accept((done * 100 + percent) / count);
+                // One part goes the old way, so a laptop with an older Ferry still gets files up to 14 MB.
+                if (count == 1) put(code, Crypto.sealFile(code, name, part), tags, "file", partProgress);
+                else put(code, Crypto.sealPart(code, id, i, count, name, part), tags, "part", partProgress);
+            }
         } catch (GeneralSecurityException e) {
             throw new IOException(e);
         }
+    }
+
+    /**
+     * Copies a shared file into the app's cache, so its size is known before sending.
+     * Throws TooLargeException when it is over MAX_FILE_BYTES. The caller deletes the copy.
+     */
+    static File stage(Context c, Uri uri) throws IOException {
+        File dir = new File(c.getCacheDir(), "outgoing");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot create " + dir);
+        File file = File.createTempFile("send", null, dir);
+        try (InputStream in = c.getContentResolver().openInputStream(uri); OutputStream out = new FileOutputStream(file)) {
+            if (in == null) throw new IOException("Cannot open " + uri);
+            byte[] chunk = new byte[64 * 1024];
+            long total = 0;
+            for (int n; (n = in.read(chunk)) != -1; ) {
+                total += n;
+                if (total > MAX_FILE_BYTES) throw new TooLargeException();
+                out.write(chunk, 0, n);
+            }
+        } catch (IOException | RuntimeException e) {
+            //noinspection ResultOfMethodCallIgnored
+            file.delete();
+            throw e;
+        }
+        return file;
+    }
+
+    static final class TooLargeException extends IOException {
     }
 
     private static void put(String code, byte[] body, String tags, String kind) throws IOException {
@@ -321,8 +390,55 @@ final class Ferry {
         }
     }
 
-    /** Saves a file from the laptop in Downloads/Ferry and returns its content:// link. Android renames it if the name is taken. */
-    static Uri saveDownload(Context c, String name, byte[] contents) throws IOException {
+    /** Writes a file's contents. A direct transfer writes straight into Downloads, with no copy in between. */
+    interface Contents {
+        void writeTo(OutputStream out) throws IOException;
+    }
+
+    static Contents from(InputStream in) {
+        return out -> {
+            byte[] chunk = new byte[64 * 1024];
+            for (int n; (n = in.read(chunk)) != -1; ) out.write(chunk, 0, n);
+        };
+    }
+
+    /** The size of a shared file, or -1 when the sharing app does not say. */
+    static long size(Context c, Uri uri) {
+        try (Cursor cur = c.getContentResolver().query(uri, new String[]{OpenableColumns.SIZE}, null, null, null)) {
+            if (cur != null && cur.moveToFirst() && !cur.isNull(0)) return cur.getLong(0);
+        } catch (RuntimeException e) {
+            // Some apps share links that cannot be queried.
+        }
+        return -1;
+    }
+
+    /** The bar of a file on its way, in a quiet notification that stays until the transfer ends. */
+    static void progress(Context c, int id, String title, long bytes, int percent) {
+        NotificationManager nm = c.getSystemService(NotificationManager.class);
+        nm.createNotificationChannel(new NotificationChannel("sending", "Sending files", NotificationManager.IMPORTANCE_LOW));
+        nm.notify(id, new Notification.Builder(c, "sending")
+                .setSmallIcon(R.drawable.ic_tile)
+                .setContentTitle(title)
+                .setContentText(bytes < 0 ? percent + "%" : percent + "% of " + String.format(Locale.ROOT, "%.1f MB", bytes / 1048576.0))
+                .setProgress(100, percent, bytes < 0)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .build());
+    }
+
+    /** Passes on at most 4 updates a second: Android drops notification updates that come faster. */
+    static IntConsumer throttled(IntConsumer progress) {
+        long[] shown = {0};
+        return percent -> {
+            long now = SystemClock.uptimeMillis();
+            if (now - shown[0] < 250) return;
+            shown[0] = now;
+            progress.accept(percent);
+        };
+    }
+
+    /** Saves a file in Downloads/Ferry and returns its content:// link. Android renames it if the name is taken. */
+    static Uri saveDownload(Context c, String name, Contents contents) throws IOException {
         // No folder parts or characters that Android refuses, and no hidden ".name" files.
         String safe = name.replaceAll("[\\\\/:*?\"<>|\\x00-\\x1f]", "_").replaceAll("^[.\\s]+|[.\\s]+$", "");
         if (safe.isEmpty()) safe = "file";
@@ -339,7 +455,7 @@ final class Ferry {
         if (item == null) throw new IOException("Downloads refused " + safe);
         try (OutputStream out = cr.openOutputStream(item)) {
             if (out == null) throw new IOException("Cannot write " + safe);
-            out.write(contents);
+            contents.writeTo(out);
         } catch (IOException e) {
             cr.delete(item, null, null);   // no empty, half-written file left in Downloads
             throw e;
