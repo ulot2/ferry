@@ -21,13 +21,14 @@ sealed class MainWindow : Form
     readonly TrayApp app;
     readonly TextBox code;
     readonly ListBox history;
-    readonly PillButton settings, copy, done, sendFile, clear, settingsDone, themeSystem, themeLight, themeDark,
-        pause, popups, images, autostart, showCode, reset, checkUpdate;
+    readonly PillButton settings, copy, done, sendFile, clear, settingsDone, themeSystem, themeLight, themeDark, showCode, reset, checkUpdate;
+    readonly SwitchRow pause, popups, images, autostart;
     List<Crossing> earlier = [];
+    List<object> rows = [];   // the logbook as shown: a string is a day heading (TODAY, YESTERDAY, EARLIER), a Crossing is an entry
     readonly Font wordmark = Chart.Font("Barlow Condensed SemiBold", 15f), pillFont = Chart.Font("Barlow Medium", 9.5f),
         kicker = Chart.Font("Barlow Medium", 8f), crossing = Chart.Font("Barlow Medium", 12.5f), body = Chart.Font("Barlow", 10f),
         bold = Chart.Font("Barlow", 10f, FontStyle.Bold), italic = Chart.Font("Barlow", 10f, FontStyle.Italic),
-        title = Chart.Font("Barlow Medium", 13f), small = Chart.Font("Barlow", 9f);
+        title = Chart.Font("Barlow Medium", 13f), small = Chart.Font("Barlow", 9f), pageTitle = Chart.Font("Barlow Medium", 16f);
     bool pairingShown, settingsShown;
     string hint = "", aboutHint = "";
     List<BitArray>? qr;
@@ -79,39 +80,42 @@ sealed class MainWindow : Form
             BorderStyle = BorderStyle.None,
             BackColor = Chart.Ground,
             ForeColor = Chart.Ink,
-            DrawMode = DrawMode.OwnerDrawFixed,
+            DrawMode = DrawMode.OwnerDrawVariable,
             IntegralHeight = false,
             AccessibleName = "Logbook",
         };
         history.DrawItem += DrawHistoryItem;
+        history.MeasureItem += (_, e) => e.ItemHeight = S(e.Index < rows.Count && rows[e.Index] is string ? 30 : 40);
         history.DoubleClick += (_, _) => CopySelected();
         history.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) CopySelected(); };
         Controls.Add(history);
         sendFile = AddButton("Send a file…", PillKind.Chip, 22, 568, 124, 36);
         sendFile.Click += (_, _) => app.PickFiles();
 
-        // Settings view: the texts and section names are painted, the choices are chips.
-        settingsDone = AddButton("Done", PillKind.Link, 338, 158, 64, 28);
+        // Settings view: a page of its own, without the chart band. Titles, section names and hints are painted.
+        settingsDone = AddButton("Done", PillKind.Link, 338, 14, 64, 28);
         settingsDone.Click += (_, _) => { settingsShown = false; Render(); };
-        themeSystem = AddButton("System", PillKind.Chip, 22, 222, 84, 36);
+        // The theme is one choice of three: a segmented control inside a painted frame (see OnPaint), not on/off chips.
+        themeSystem = AddButton("System", PillKind.Segment, 25, 87, 123, 32);
         themeSystem.Click += (_, _) => app.Theme = "system";
-        themeLight = AddButton("Light", PillKind.Chip, 114, 222, 72, 36);
+        themeLight = AddButton("Light", PillKind.Segment, 148, 87, 124, 32);
         themeLight.Click += (_, _) => app.Theme = "light";
-        themeDark = AddButton("Dark", PillKind.Chip, 194, 222, 70, 36);
+        themeDark = AddButton("Dark", PillKind.Segment, 272, 87, 123, 32);
         themeDark.Click += (_, _) => app.Theme = "dark";
-        pause = AddButton("Pause", PillKind.Chip, 22, 298, 74, 36);
+        pause = AddSwitch("Pause syncing", "Copies stay on each device until you turn this off.", 184);
         pause.Click += (_, _) => app.Paused = !app.Paused;
-        popups = AddButton("Pop-ups", PillKind.Chip, 104, 298, 86, 36);
+        popups = AddSwitch("Show pop-ups", "A pop-up shows what arrives from the phone.", 234);
         popups.Click += (_, _) => app.Popups = !app.Popups;
-        images = AddButton("Images", PillKind.Chip, 198, 298, 82, 36);
+        images = AddSwitch("Send and receive images", "Copied images cross both ways, up to 10 MB.", 284);
         images.Click += (_, _) => app.Images = !app.Images;
-        autostart = AddButton("Start with Windows", PillKind.Chip, 22, 342, 156, 36);
+        autostart = AddSwitch("Start with Windows", "Ferry starts in the tray when you sign in.", 334);
         autostart.Click += (_, _) => { app.StartWithWindows = !app.StartWithWindows; Render(); };
-        showCode = AddButton("Show pairing code", PillKind.Link, 12, 432, 160, 32);
+        showCode = AddButton("Show pairing code", PillKind.Link, 12, 440, 160, 32);
         showCode.Click += (_, _) => { pairingShown = true; Render(); };
-        reset = AddButton("Reset pairing", PillKind.Link, 176, 432, 120, 32);
+        // Reset pairing unpairs the phone: an outlined adrift button on its own line, apart from the harmless link above.
+        reset = AddButton("Reset pairing", PillKind.Danger, 22, 480, 132, 34);
         reset.Click += (_, _) => ConfirmReset();
-        checkUpdate = AddButton("Check for updates", PillKind.Link, 12, 524, 220, 32);
+        checkUpdate = AddButton("Check for updates", PillKind.Link, 12, 572, 220, 32);
         checkUpdate.Click += async (_, _) => await CheckUpdate();
 
         // Drop files anywhere on the window to send them to the phone.
@@ -133,13 +137,19 @@ sealed class MainWindow : Form
         return button;
     }
 
+    SwitchRow AddSwitch(string text, string hint, int y)
+    {
+        var row = new SwitchRow(text, hint) { Bounds = new Rectangle(22, y, 376, 46) };
+        Controls.Add(row);
+        return row;
+    }
+
     View CurrentView => settingsShown && !pairingShown ? View.Settings
         : pairingShown || app.Settings.Peer == "" ? View.Pairing : View.Logbook;
 
     void CopySelected()
     {
-        if (history.SelectedIndex < 0 || history.SelectedIndex >= earlier.Count) return;
-        var item = earlier[history.SelectedIndex];
+        if (history.SelectedIndex < 0 || history.SelectedIndex >= rows.Count || rows[history.SelectedIndex] is not Crossing item) return;
         try
         {
             if (item.FilePath is not null)
@@ -186,25 +196,54 @@ sealed class MainWindow : Form
 
     void DrawHistoryItem(object? sender, DrawItemEventArgs e)
     {
-        if (e.Index < 0 || e.Index >= earlier.Count) return;
-        var item = earlier[e.Index];
-        bool selected = (e.State & DrawItemState.Selected) != 0;
+        if (e.Index < 0 || e.Index >= rows.Count) return;
         var g = e.Graphics;
         var b = e.Bounds;
         float s = DeviceDpi / 96f;
+        if (rows[e.Index] is string heading)
+        {
+            // A day heading: not an entry, so it never shows as selected.
+            using (var back = new SolidBrush(Chart.Ground)) g.FillRectangle(back, b);
+            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            Chart.DrawTracked(g, heading, kicker, Chart.InkMuted, b.X + 4 * s, b.Bottom - 18 * s, 1.2f * s);
+            return;
+        }
+        var item = (Crossing)rows[e.Index];
+        bool selected = (e.State & DrawItemState.Selected) != 0;
         using (var back = new SolidBrush(selected ? Chart.Hover : Chart.Ground)) g.FillRectangle(back, b);
         using (var rule = new Pen(Chart.RuleRow, 1)) g.DrawLine(rule, b.Left, b.Bottom - 1, b.Right, b.Bottom - 1);
 
-        string when = item.Time.Date == DateTime.Today ? item.Time.ToString("t") : item.Time.ToString("d MMM");
+        // Today and Yesterday rows show the time, because the heading gives the day; Earlier rows show the date.
+        string when = Group(item.Time) == "EARLIER" ? item.Time.ToString("d MMM") : item.Time.ToString("t");
         bool toPhone = item.Direction.EndsWith("Phone");
-        string line = item.FilePath is not null ? "File  ·  " + item.Text
-            : item.ImagePath is null ? TrayApp.Preview(item.Text) : item.ImagePath == "" ? "Image" : "Image  ·  " + Path.GetFileName(item.ImagePath);
+        var kind = item.FilePath is not null ? Chart.Kind.File : item.ImagePath is not null ? Chart.Kind.Image
+            : TrayApp.Link(item.Text) is not null ? Chart.Kind.Link : Chart.Kind.Text;
+        string line = item.FilePath is not null ? item.Text
+            : item.ImagePath is null ? TrayApp.Preview(item.Text) : item.ImagePath == "" ? "Image" : Path.GetFileName(item.ImagePath);
         var flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine;
         TextRenderer.DrawText(g, when, bold, new Rectangle(b.X + (int)(4 * s), b.Y, (int)(66 * s), b.Height), Chart.Ink, flags);
         TextRenderer.DrawText(g, toPhone ? "→" : "←", bold, new Rectangle(b.X + (int)(72 * s), b.Y, (int)(24 * s), b.Height), Chart.Course, flags);
-        TextRenderer.DrawText(g, line, body, new Rectangle(b.X + (int)(98 * s), b.Y, b.Width - (int)(102 * s), b.Height), Chart.Ink,
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        Chart.DrawKind(g, kind, new RectangleF(b.X + 98 * s, b.Y + (b.Height - 16 * s) / 2, 16 * s, 16 * s), Chart.InkMuted);
+        TextRenderer.DrawText(g, line, body, new Rectangle(b.X + (int)(124 * s), b.Y, b.Width - (int)(128 * s), b.Height), Chart.Ink,
             flags | TextFormatFlags.EndEllipsis);
         e.DrawFocusRectangle();
+    }
+
+    /// <summary>The logbook group for a time: TODAY, YESTERDAY or EARLIER.</summary>
+    static string Group(DateTime t) => t.Date == DateTime.Today ? "TODAY" : t.Date == DateTime.Today.AddDays(-1) ? "YESTERDAY" : "EARLIER";
+
+    /// <summary>The entries with a heading before each day group. Newest first, so the groups come in the order Today, Yesterday, Earlier.</summary>
+    static List<object> WithHeadings(List<Crossing> items)
+    {
+        var list = new List<object>();
+        string? group = null;
+        foreach (var item in items)
+        {
+            if (Group(item.Time) != group) list.Add(group = Group(item.Time));
+            list.Add(item);
+        }
+        return list;
     }
 
     int S(int v) => (int)Math.Round(v * DeviceDpi / 96f);
@@ -241,7 +280,11 @@ sealed class MainWindow : Form
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Escape) Hide();
+        if (e.KeyCode == Keys.Escape)
+        {
+            if (CurrentView == View.Settings) ShowLogbook();   // back from Settings first, like its Done link
+            else Hide();
+        }
         base.OnKeyDown(e);
     }
 
@@ -289,8 +332,9 @@ sealed class MainWindow : Form
         foreach (Control ctl in new Control[] { settingsDone, themeSystem, themeLight, themeDark, pause, popups, images, autostart, showCode, checkUpdate })
             ctl.Visible = view == View.Settings;
         reset.Visible = view != View.Logbook;
-        reset.Location = view == View.Pairing ? new Point(S(296), S(518)) : new Point(S(176), S(432));
-        settings.AccessibleName = view == View.Settings ? "Close settings" : "Settings";
+        reset.Location = view == View.Pairing ? new Point(S(276), S(516)) : new Point(S(22), S(480));
+        settings.Visible = view != View.Settings;   // Settings has its own Done link and no chart band
+        if (IsHandleCreated) Chart.ChartTitleBar(Handle, view == View.Settings ? Chart.Ground : null);
 
         code.Text = Crypto.Grouped(st.Code);
         themeSystem.On = st.Theme == "system";
@@ -304,15 +348,16 @@ sealed class MainWindow : Form
 
         // The text under the chart shows the newest crossing; the logbook holds the ones before it.
         earlier = st.History.Skip(1).ToList();
-        history.ItemHeight = S(40);
+        rows = WithHeadings(earlier);
         history.BeginUpdate();
         history.Items.Clear();
-        foreach (var item in earlier) history.Items.Add(item.Direction + ": " + TrayApp.Preview(item.Text));   // text for screen readers
+        foreach (var row in rows)   // text for screen readers
+            history.Items.Add(row is Crossing item ? item.Direction + ": " + TrayApp.Preview(item.Text) : ((string)row).ToLowerInvariant());
         history.EndUpdate();
         history.Visible = view == View.Logbook && earlier.Count > 0;   // empty: the painted hint under the rule shows instead
         if (hint == "Copied.") hint = "";
 
-        ClientSize = new Size(S(420), S(view == View.Pairing ? 560 : 616));
+        ClientSize = new Size(S(420), S(view switch { View.Pairing => 560, View.Settings => 640, _ => 616 }));
         Invalidate();
     }
 
@@ -325,6 +370,25 @@ sealed class MainWindow : Form
         var st = app.Settings;
         var c = app.LastCrossing;
         var view = CurrentView;
+        float x = 22 * s, w = ClientSize.Width - 44 * s;
+
+        if (view == View.Settings)
+        {
+            // A page of its own: no chart band, the same order of sections as on the phone.
+            TextRenderer.DrawText(g, "Settings", pageTitle, new Point((int)x, (int)(14 * s)), Chart.Ink);
+            Chart.DrawTracked(g, "APPEARANCE", kicker, Chart.InkMuted, x, 66 * s, 1.2f * s);
+            using (var frame = Chart.RoundRect(new RectangleF(x, 84 * s, w, 38 * s), 19 * s))
+            using (var pen = new Pen(Chart.ChipOff, s)) g.DrawPath(pen, frame);
+            TextRenderer.DrawText(g, st.Theme == "system" ? $"Follows the light or dark mode of Windows. Now: {(Chart.Dark ? "dark" : "light")}."
+                : $"Always {st.Theme}, whatever Windows uses.", small, new Point((int)x, (int)(130 * s)), Chart.InkMuted);
+            Chart.DrawTracked(g, "SYNCING", kicker, Chart.InkMuted, x, 166 * s, 1.2f * s);
+            Chart.DrawTracked(g, "PAIRING", kicker, Chart.InkMuted, x, 402 * s, 1.2f * s);
+            TextRenderer.DrawText(g, st.Peer == "" ? "Not paired yet." : $"Paired with {st.Peer}.", body, new Point((int)x, (int)(420 * s)), Chart.Ink);
+            Chart.DrawTracked(g, "ABOUT", kicker, Chart.InkMuted, x, 536 * s, 1.2f * s);
+            TextRenderer.DrawText(g, $"Ferry {Updater.Current}", body, new Point((int)x, (int)(554 * s)), Chart.Ink);
+            if (aboutHint != "") TextRenderer.DrawText(g, aboutHint, small, new Point((int)x, (int)(610 * s)), Chart.InkMuted);
+            return;
+        }
 
         // The chart band.
         string phone = st.Peer == "" ? "Your phone" : st.Peer;
@@ -333,7 +397,6 @@ sealed class MainWindow : Form
         Chart.DrawTracked(g, "FERRY", wordmark, Chart.Ink, 18 * s, 12 * s, 3.5f * s);
         DrawStatusPill(g, s);
 
-        float x = 22 * s, w = ClientSize.Width - 44 * s;
         if (view == View.Pairing)
         {
             TextRenderer.DrawText(g, st.Peer != "" ? "Pair a phone again" : "Pair your phone", title, new Point((int)x, (int)(164 * s)), Chart.Ink);
@@ -341,19 +404,6 @@ sealed class MainWindow : Form
                 new Rectangle((int)x, (int)(192 * s), (int)w, (int)(40 * s)), Chart.InkMuted, TextFormatFlags.WordBreak);
             TextRenderer.DrawText(g, "Can't scan? Type this code in Ferry:", small, new Point((int)x, (int)(462 * s)), Chart.InkMuted);
             DrawQr(g, s);
-            return;
-        }
-
-        if (view == View.Settings)
-        {
-            TextRenderer.DrawText(g, "Settings", title, new Point((int)x, (int)(162 * s)), Chart.Ink);
-            Chart.DrawTracked(g, "APPEARANCE", kicker, Chart.InkMuted, x, 204 * s, 1.2f * s);
-            Chart.DrawTracked(g, "SYNCING", kicker, Chart.InkMuted, x, 280 * s, 1.2f * s);
-            Chart.DrawTracked(g, "PAIRING", kicker, Chart.InkMuted, x, 392 * s, 1.2f * s);
-            TextRenderer.DrawText(g, st.Peer == "" ? "Not paired yet." : $"Paired with {st.Peer}.", body, new Point((int)x, (int)(410 * s)), Chart.Ink);
-            Chart.DrawTracked(g, "ABOUT", kicker, Chart.InkMuted, x, 486 * s, 1.2f * s);
-            TextRenderer.DrawText(g, $"Ferry {Updater.Current}", body, new Point((int)x, (int)(504 * s)), Chart.Ink);
-            if (aboutHint != "") TextRenderer.DrawText(g, aboutHint, small, new Point((int)x, (int)(562 * s)), Chart.InkMuted);
             return;
         }
 

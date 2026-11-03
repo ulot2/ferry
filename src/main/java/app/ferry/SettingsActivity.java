@@ -15,6 +15,7 @@ import android.provider.Settings;
 import android.text.format.DateUtils;
 import android.view.View;
 import android.widget.Button;
+import android.widget.RadioGroup;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -26,9 +27,10 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
     private static final String HELP = "https://github.com/ulot2/ferry#readme";
     private static final String FERRY_AUTO_HELP = "https://github.com/ulot2/ferry#ferry-auto-automatic-sending";
     private static final int PHOTOS = 1;
-    private Button themeSystem, themeLight, themeDark, autoHelp, battery, update;
+    private Button autoHelp, battery, update;
+    private RadioGroup themeGroup;
     private Switch autoSwitch, imagesSwitch, screenshotsSwitch;
-    private TextView autoBody, screenshotsBody, pairTitle, pairBody, batteryTitle, version, updateBody;
+    private TextView themeHint, autoTitle, autoBody, screenshotsBody, pairTitle, pairBody, batteryBody, version, updateBody;
     private View syncing, pairing, running, xiaomi;
     private boolean checking;
 
@@ -43,9 +45,9 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         setContentView(R.layout.activity_settings);
-        themeSystem = findViewById(R.id.themeSystem);
-        themeLight = findViewById(R.id.themeLight);
-        themeDark = findViewById(R.id.themeDark);
+        themeGroup = findViewById(R.id.themeGroup);
+        themeHint = findViewById(R.id.themeHint);
+        autoTitle = findViewById(R.id.autoTitle);
         autoSwitch = findViewById(R.id.autoSwitch);
         autoBody = findViewById(R.id.autoBody);
         autoHelp = findViewById(R.id.autoHelp);
@@ -54,7 +56,7 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
         screenshotsBody = findViewById(R.id.screenshotsBody);
         pairTitle = findViewById(R.id.pairTitle);
         pairBody = findViewById(R.id.pairBody);
-        batteryTitle = findViewById(R.id.batteryTitle);
+        batteryBody = findViewById(R.id.batteryBody);
         battery = findViewById(R.id.battery);
         version = findViewById(R.id.version);
         updateBody = findViewById(R.id.updateBody);
@@ -65,9 +67,8 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
         xiaomi = findViewById(R.id.xiaomi);
 
         findViewById(R.id.back).setOnClickListener(v -> finish());
-        themeSystem.setOnClickListener(v -> chooseTheme("system"));
-        themeLight.setOnClickListener(v -> chooseTheme("light"));
-        themeDark.setOnClickListener(v -> chooseTheme("dark"));
+        themeGroup.setOnCheckedChangeListener((group, id) ->
+                chooseTheme(id == R.id.themeLight ? "light" : id == R.id.themeDark ? "dark" : "system"));
 
         // Android only lets the user turn on an accessibility service, so the switch opens that page.
         autoSwitch.setOnClickListener(v -> {
@@ -153,13 +154,17 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
         boolean paired = Ferry.paired(this), autoEdition = Ferry.autoEdition(this);
 
         String theme = Ferry.theme(this);
-        chip(themeSystem, "System", theme.equals("system"));
-        chip(themeLight, "Light", theme.equals("light"));
-        chip(themeDark, "Dark", theme.equals("dark"));
+        themeGroup.check(theme.equals("light") ? R.id.themeLight : theme.equals("dark") ? R.id.themeDark : R.id.themeSystem);
+        boolean night = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        themeHint.setText(theme.equals("system")
+                ? "Follows the light or dark mode of Android. Now: " + (night ? "dark." : "light.")
+                : "Always " + theme + ", whatever Android uses.");
 
         syncing.setVisibility(paired ? View.VISIBLE : View.GONE);
+        // Only Ferry Auto can send by itself. Standard Ferry shows a title and a link, not a switch that cannot turn on.
+        autoSwitch.setVisibility(autoEdition ? View.VISIBLE : View.GONE);
+        autoTitle.setVisibility(autoEdition ? View.GONE : View.VISIBLE);
         autoSwitch.setChecked(Ferry.autoSendOn(this));
-        autoSwitch.setEnabled(autoEdition);
         if (autoEdition) {
             autoBody.setText("Skip the Send button. Ferry uses Android's accessibility permission to notice taps on Copy. "
                     + "It reads only the label of what you tap. If the switch in Android is greyed out, open App info, tap ⋮, then Allow restricted settings.");
@@ -185,7 +190,8 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
 
         running.setVisibility(paired ? View.VISIBLE : View.GONE);
         boolean allowed = getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
-        batteryTitle.setText(allowed ? "Background use: allowed" : "Background use: not allowed");
+        batteryBody.setText(allowed ? "Allowed. Ferry keeps the link open while the phone sleeps."
+                : "Not allowed. Android cuts the connection when the phone sleeps, so laptop copies stop arriving.");
         battery.setVisibility(allowed ? View.GONE : View.VISIBLE);
         String maker = Build.MANUFACTURER.toLowerCase(Locale.ROOT);
         xiaomi.setVisibility(maker.contains("xiaomi") || maker.contains("redmi") || maker.contains("poco") ? View.VISIBLE : View.GONE);
@@ -239,12 +245,5 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
 
     private void open(String url) {
         if (!url.isEmpty()) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-    }
-
-    /** Filled = chosen, outlined = not. */
-    private void chip(Button b, String name, boolean on) {
-        b.setBackgroundResource(on ? R.drawable.bg_chip_on : R.drawable.bg_chip_off);
-        b.setTextColor(getColor(on ? R.color.chip_on_text : R.color.ink));
-        b.setContentDescription(name + (on ? ", chosen" : ""));
     }
 }

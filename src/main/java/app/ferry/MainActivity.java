@@ -24,6 +24,7 @@ import android.view.WindowInsets;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -291,25 +292,41 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         LayoutInflater inflater = getLayoutInflater();
         DateFormat time = DateFormat.getTimeInstance(DateFormat.SHORT);
         int rule = getColor(R.color.rule_row);
+        float dp = getResources().getDisplayMetrics().density;
+        String group = null;
         for (int i = 1; i < history.length(); i++) {
             JSONObject item = history.optJSONObject(i);
             if (item == null) continue;
             String text = item.optString("text");
             long at = item.optLong("at");
-            if (historyList.getChildCount() > 0) {
+            // Newest first, so a heading goes in where the day group changes: Today, Yesterday, then Earlier.
+            String g = DateUtils.isToday(at) ? "TODAY" : DateUtils.isToday(at + DateUtils.DAY_IN_MILLIS) ? "YESTERDAY" : "EARLIER";
+            if (!g.equals(group)) {
+                group = g;
+                TextView heading = new TextView(this, null, 0, R.style.Ferry_Kicker);
+                heading.setText(g);
+                heading.setPadding(0, (int) ((historyList.getChildCount() == 0 ? 14 : 22) * dp), 0, (int) (4 * dp));
+                heading.setAccessibilityHeading(true);
+                historyList.addView(heading);
+            } else {
                 View divider = new View(this);
                 divider.setBackgroundColor(rule);
                 historyList.addView(divider, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
             }
             View row = inflater.inflate(R.layout.item_crossing, historyList, false);
-            String when = DateUtils.isToday(at) ? time.format(new Date(at))
-                    : DateUtils.formatDateTime(this, at, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH);
+            // Earlier rows show the date; Today and Yesterday rows show the time, because the heading gives the day.
+            String when = g.equals("EARLIER") ? DateUtils.formatDateTime(this, at, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH)
+                    : time.format(new Date(at));
             boolean toPhone = Ferry.TO_PHONE.equals(item.optString("dir"));
             ((TextView) row.findViewById(R.id.itemMeta)).setText(when);
             ((TextView) row.findViewById(R.id.itemArrow)).setText(toPhone ? "→" : "←");
             String image = item.optString("image", null), file = item.optString("file", null);
-            ((TextView) row.findViewById(R.id.itemText)).setText(file != null ? "File · " + text : image != null ? text : Ferry.preview(text));
-            row.setContentDescription((toPhone ? "From laptop, " : "To laptop, ") + when + (file != null ? ". Open file: " + text
+            boolean link = file == null && image == null && Ferry.link(text) != null;
+            ((ImageView) row.findViewById(R.id.itemKind)).setImageResource(file != null ? R.drawable.ic_kind_file
+                    : image != null ? R.drawable.ic_kind_image : link ? R.drawable.ic_kind_link : R.drawable.ic_kind_text);
+            ((TextView) row.findViewById(R.id.itemText)).setText(image != null || file != null ? text : Ferry.preview(text));
+            String kind = file != null ? "File" : image != null ? "Image" : link ? "Link" : "Text";
+            row.setContentDescription(kind + (toPhone ? " from laptop, " : " to laptop, ") + when + (file != null ? ". Open file: " + text
                     : ". Copy again: " + (image != null ? text : Ferry.preview(text))));
             row.setOnClickListener(v -> {
                 if (file != null) openFile(file);

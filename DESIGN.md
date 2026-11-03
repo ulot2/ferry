@@ -53,11 +53,15 @@ paired device) and the course time. Status sits on the chart as a pill (dot + "S
 ## Components
 - Primary button: Act fill, white Barlow Bold 17sp, full pill, 52dp tall. One per screen.
 - Chips (toggles): pill, 44dp tall; on = Chip on fill; off = Chip off outline with ink text.
-- Logbook rows: time (Bold) · arrow (course color; → toward the phone, ← toward the laptop) · item, separated by row rules. Tap (phone) or double-click / Enter (laptop) copies again.
+- Logbook rows: time (Bold) · arrow (course color; → toward the phone, ← toward the laptop) · kind icon (ink muted, 18dp: lines for text, chain links for a web link, a framed hill for an image, a page with a folded corner for a file) · item, separated by row rules. Tap (phone) or double-click / Enter (laptop) copies again, or opens a file on the phone.
+- Logbook groups: a kicker-style heading (TODAY, YESTERDAY, EARLIER) where the day changes. Today and Yesterday rows show the time; Earlier rows show the date.
 - Notices (update ready, battery, automatic sending in Ferry Auto, pairing): at most one on the main screen, the most urgent first. Each is an outlined box (1dp section rule, 12dp corners) with a Medium title, body in ink muted, and one action. No colored side borders.
 - Links ("Show pairing code", "Reset pairing", "Clear", "Done"): course color text, no fill.
 - Settings button: a round pill (Pill color) on the chart, right of the status pill, with three sliders in ink. The same icon on both apps.
-- Settings screen: section names in the kicker style (APPEARANCE, SYNCING, PAIRING, KEEP FERRY RUNNING on the phone, ABOUT). Theme choice and laptop switches are chips; phone switches are switch rows (label left, switch right, course color when on) with a short hint under each.
+- Settings screen: a page of its own (no chart band), title "Settings" in sentence case, section names in the kicker style (APPEARANCE, SYNCING, PAIRING, KEEP FERRY RUNNING on the phone, ABOUT). The laptop closes it with Done (or Escape), the phone with ← Back.
+- Segmented control (the theme: System, Light, Dark): one outlined pill around all choices; the chosen one is filled with Chip on. Used only for one-of-several choices, never for on/off. A hint under it says what System gives now.
+- Switch rows (on/off settings, both apps): label (Medium) and a one-line hint (ink muted) on the left, a switch on the right: course-colored track with a white knob when on, an outlined track when off. The whole row toggles. Labels say what is on ("Pause syncing", "Show pop-ups").
+- Danger button (Reset pairing, Unpair): outlined in the adrift color with adrift text, on its own line, always behind a confirmation.
 
 ## Layout
 - Android: edge-to-edge; the chart (240dp plus the status-bar inset) runs under the status bar. 20dp side margins, 16dp between blocks.

@@ -151,6 +151,38 @@ static class Chart
         }
     }
 
+    public enum Kind { Text, Link, Image, File }
+
+    /// <summary>The logbook icon for what crossed, drawn in a square box: lines of text, two chain links, a framed hill, or a page with a folded corner.</summary>
+    public static void DrawKind(Graphics g, Kind kind, RectangleF box, Color color)
+    {
+        float u = box.Width / 24f, x = box.X, y = box.Y;
+        PointF P(float px, float py) => new(x + px * u, y + py * u);
+        using var pen = new Pen(color, 1.8f * u) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        switch (kind)
+        {
+            case Kind.Text:
+                g.DrawLine(pen, P(4, 7), P(20, 7));
+                g.DrawLine(pen, P(4, 12), P(20, 12));
+                g.DrawLine(pen, P(4, 17), P(14, 17));
+                break;
+            case Kind.Link:
+                using (var left = RoundRect(new RectangleF(x + 2 * u, y + 8 * u, 10 * u, 8 * u), 4 * u)) g.DrawPath(pen, left);
+                using (var right = RoundRect(new RectangleF(x + 12 * u, y + 8 * u, 10 * u, 8 * u), 4 * u)) g.DrawPath(pen, right);
+                g.DrawLine(pen, P(8.5f, 12), P(15.5f, 12));
+                break;
+            case Kind.Image:
+                using (var frame = RoundRect(new RectangleF(x + 3 * u, y + 5 * u, 18 * u, 14 * u), 2 * u)) g.DrawPath(pen, frame);
+                g.DrawLines(pen, [P(6.5f, 16.5f), P(10, 12), P(13, 15.5f), P(15, 13.2f), P(17.5f, 16.5f)]);
+                using (var sun = new SolidBrush(color)) g.FillEllipse(sun, x + 14.5f * u, y + 7.3f * u, 3 * u, 3 * u);
+                break;
+            case Kind.File:
+                g.DrawPolygon(pen, [P(6, 3), P(13.5f, 3), P(19, 8.5f), P(19, 21), P(6, 21)]);
+                g.DrawLines(pen, [P(13.5f, 3), P(13.5f, 8.5f), P(19, 8.5f)]);
+                break;
+        }
+    }
+
     /// <summary>The app icon: day-chart water with two harbors and the course, plus an optional status dot.</summary>
     public static Icon AppIcon(int px, Color? lamp)
     {
@@ -184,10 +216,11 @@ static class Chart
         return icon;
     }
 
-    /// <summary>Windows 11: paint the title bar in the chart's water color so it joins the chart. Older Windows ignores it.</summary>
-    public static void ChartTitleBar(IntPtr hwnd)
+    /// <summary>Windows 11: paint the title bar in the color under it (the chart's water, or the page in Settings) so they join. Older Windows ignores it.</summary>
+    public static void ChartTitleBar(IntPtr hwnd, Color? under = null)
     {
-        int caption = Water.R | Water.G << 8 | Water.B << 16, text = Ink.R | Ink.G << 8 | Ink.B << 16;
+        var back = under ?? Water;
+        int caption = back.R | back.G << 8 | back.B << 16, text = Ink.R | Ink.G << 8 | Ink.B << 16;
         DwmSetWindowAttribute(hwnd, 35, ref caption, sizeof(int));   // DWMWA_CAPTION_COLOR
         DwmSetWindowAttribute(hwnd, 36, ref text, sizeof(int));      // DWMWA_TEXT_COLOR
     }
@@ -197,9 +230,12 @@ static class Chart
     [DllImport("gdi32.dll")] static extern IntPtr AddFontMemResourceEx(IntPtr font, uint length, IntPtr reserved, ref uint fonts);
 }
 
-enum PillKind { Primary, Chip, Link, Settings }
+enum PillKind { Primary, Chip, Link, Settings, Segment, Danger }
 
-/// <summary>Chart button: magenta primary pill, an on/off chip (filled when on), a link in the course color, or the round settings button on the chart.</summary>
+/// <summary>
+/// Chart button: magenta primary pill, an on/off chip (filled when on), a link in the course color, the round settings
+/// button on the chart, one choice of a segmented control (filled when chosen), or an outlined button that undoes something.
+/// </summary>
 sealed class PillButton : Button
 {
     readonly PillKind kind;
@@ -211,13 +247,20 @@ sealed class PillButton : Button
         Text = text;
         Cursor = Cursors.Hand;
         FlatStyle = FlatStyle.Flat;
-        BackColor = kind == PillKind.Settings ? Chart.Water : Chart.Ground;   // the settings button sits on the chart band
+        BackColor = Chart.Ground;
+        if (kind == PillKind.Settings)
+        {
+            // It sits on the chart band: a see-through background lets the form paint the chart behind it, with no box around the pill.
+            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
+        }
         Font = Chart.Font("Barlow", kind == PillKind.Primary ? 10.5f : 9.75f, kind == PillKind.Primary ? FontStyle.Bold : FontStyle.Regular);
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         if (kind == PillKind.Chip) AccessibleRole = AccessibleRole.CheckButton;
+        if (kind == PillKind.Segment) AccessibleRole = AccessibleRole.RadioButton;
     }
 
-    /// <summary>For chips: filled when on. Screen readers hear "on" or "off".</summary>
+    /// <summary>For chips: filled when on; screen readers hear "on" or "off". For segments: filled when chosen; they hear "selected".</summary>
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]   // set in code, never by the form designer
     public bool On
     {
@@ -225,7 +268,7 @@ sealed class PillButton : Button
         set
         {
             on = value;
-            AccessibleName = Text + (value ? ", on" : ", off");
+            AccessibleName = kind == PillKind.Segment ? Text + (value ? ", selected" : "") : Text + (value ? ", on" : ", off");
             Invalidate();
         }
     }
@@ -238,7 +281,7 @@ sealed class PillButton : Button
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(BackColor);
+        if (BackColor.A == 255) g.Clear(BackColor);   // a see-through button already has the chart painted behind it
         g.SmoothingMode = SmoothingMode.AntiAlias;
         float s = DeviceDpi / 96f;
         var r = new RectangleF(s, s, Width - 2 * s, Height - 2 * s);
@@ -267,6 +310,18 @@ sealed class PillButton : Button
                 align = TextFormatFlags.Left;   // links read as text, in line with the text above
                 bounds = Rectangle.FromLTRB((int)(10 * s), 0, Width, Height);
                 break;
+            case PillKind.Segment when on:
+                using (var fill = new SolidBrush(Chart.ChipOn)) g.FillPath(fill, pill);
+                text = Chart.ChipOnText;
+                break;
+            case PillKind.Segment:
+                if (hover) using (var fill = new SolidBrush(Chart.Hover)) g.FillPath(fill, pill);
+                break;
+            case PillKind.Danger:
+                if (hover) using (var fill = new SolidBrush(Chart.Hover)) g.FillPath(fill, pill);
+                using (var pen = new Pen(Chart.Adrift, s)) g.DrawPath(pen, pill);
+                text = Chart.Adrift;
+                break;
             case PillKind.Settings:
                 // Three sliders in ink on a round pill, the same icon as on the phone. Text is only the accessible name.
                 using (var fill = new SolidBrush(hover || down ? Chart.Hover : Chart.Pill)) g.FillPath(fill, pill);
@@ -288,6 +343,85 @@ sealed class PillButton : Button
             var inner = RectangleF.Inflate(r, -3 * s, -3 * s);
             using var ring = Chart.RoundRect(inner, inner.Height / 2);
             using var pen = new Pen(kind == PillKind.Primary ? Color.White : Chart.Ink, 2 * s);
+            g.DrawPath(pen, ring);
+        }
+    }
+}
+
+/// <summary>A setting you turn on or off: the label and a short hint on the left, a switch on the right. Clicking anywhere on the row, or Space, flips it.</summary>
+sealed class SwitchRow : Control
+{
+    readonly Font label = Chart.Font("Barlow Medium", 10.5f), small = Chart.Font("Barlow", 9f);
+    readonly string hint;
+    bool on, hover;
+
+    public SwitchRow(string text, string hint)
+    {
+        Text = text;
+        this.hint = hint;
+        Cursor = Cursors.Hand;
+        BackColor = Chart.Ground;
+        TabStop = true;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
+            | ControlStyles.Selectable | ControlStyles.ResizeRedraw, true);
+        AccessibleRole = AccessibleRole.CheckButton;
+        AccessibleDescription = hint;
+    }
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]   // set in code, never by the form designer
+    public bool On
+    {
+        get => on;
+        set
+        {
+            on = value;
+            AccessibleName = Text + (value ? ", on" : ", off");
+            Invalidate();
+        }
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Space) OnClick(EventArgs.Empty);
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(BackColor);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        float s = DeviceDpi / 96f, w = 40 * s, h = 22 * s;
+        var track = new RectangleF(Width - w - 5 * s, 6 * s, w, h);   // room on the right for the focus ring
+        int textWidth = (int)(track.X - 12 * s);
+        TextRenderer.DrawText(g, Text, label, new Rectangle(0, (int)(4 * s), textWidth, (int)(22 * s)), Chart.Ink,
+            TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+        TextRenderer.DrawText(g, hint, small, new Rectangle(0, (int)(27 * s), textWidth, (int)(18 * s)), Chart.InkMuted,
+            TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+
+        // The switch: a course-colored track with a white knob on the right when on; an outlined track with the knob on the left when off.
+        using (var path = Chart.RoundRect(track, h / 2))
+        {
+            if (on)
+                using (var fill = new SolidBrush(Chart.Course)) g.FillPath(fill, path);
+            else
+            {
+                if (hover) using (var fill = new SolidBrush(Chart.Hover)) g.FillPath(fill, path);
+                using (var pen = new Pen(Chart.ChipOff, 1.5f * s)) g.DrawPath(pen, path);
+            }
+        }
+        float d = h - 8 * s, kx = on ? track.Right - 4 * s - d : track.X + 4 * s;
+        using (var knob = new SolidBrush(on ? Color.White : Chart.ChipOff)) g.FillEllipse(knob, kx, track.Y + 4 * s, d, d);
+
+        if (Focused && ShowFocusCues)
+        {
+            using var ring = Chart.RoundRect(RectangleF.Inflate(track, 3 * s, 3 * s), h / 2 + 3 * s);
+            using var pen = new Pen(Chart.Ink, 1.5f * s);
             g.DrawPath(pen, ring);
         }
     }

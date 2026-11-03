@@ -81,7 +81,7 @@ When text arrives, the other device shows it:
 
 Both apps show your clipboard as a sea chart. The laptop and the phone are two harbors, and a magenta course line joins them. The arrow on the line points the way the last crossing (transfer) went, and the label on the line gives its time.
 
-Under the chart, the newest crossing shows in large text. The earlier ones are in the **logbook**: the app keeps the last 10. To copy an earlier one again, tap it on the phone, or double-click it on the laptop.
+Under the chart, the newest crossing shows in large text. The earlier ones are in the **logbook**: the app keeps the last 10. The logbook groups them under **Today**, **Yesterday** and **Earlier**. An icon on each row shows what crossed: text, a web link, an image or a file. To copy an earlier one again, tap it on the phone, or double-click it on the laptop.
 
 The pill in the top-right corner of the chart shows the connection:
 
@@ -94,7 +94,7 @@ The main screen shows only the chart, the last crossing and the logbook. On the 
 Everything that you set once is in **Settings**. To open it, click or tap the round button with three sliders, right of the pill. In the Settings of each app:
 
 - **Appearance**: **System**, **Light** or **Dark**. Light is a day chart (pale blue water). Dark is a soft charcoal night chart. System follows the light or dark mode of the device. Each device keeps its own choice.
-- **Syncing**: images, screenshots and automatic sending on the phone. Pause, pop-ups, images and Start with Windows on the laptop. A filled chip is on, an outlined chip is off.
+- **Syncing**: images, screenshots and automatic sending on the phone. Pause syncing, pop-ups, images and Start with Windows on the laptop. Each is a switch with a short line that says what it does.
 - **Pairing**: the paired device, **Unpair** on the phone, and **Show pairing code** and **Reset pairing** on the laptop.
 - **Keep Ferry running** (phone): background use, and Autostart on Xiaomi phones.
 - **About**: the version, and **Check for updates**.
