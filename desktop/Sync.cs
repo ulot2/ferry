@@ -18,6 +18,7 @@ sealed class Sync
     public event Action<byte[], DateTime>? ImageReceived;
     public event Action<string, byte[], DateTime>? FileReceived;
     public event Action<string>? PhonePaired;
+    public event Action? PhoneUnpaired;   // the phone tapped Unpair
     public event Action<string>? MessageSeen;   // message id, for catching up after a restart
 
     /// <summary>ntfy.sh takes files up to 15 MB. The name and the encryption add a few hundred bytes.</summary>
@@ -123,12 +124,13 @@ sealed class Sync
         string? text = Crypto.Open(code, sealedText);
         if (string.IsNullOrEmpty(text)) return id;   // not from our phone: ignore it
 
-        if (tags.Contains("pair")) PhonePaired?.Invoke(text);   // the phone sends its model name when it pairs
+        if (tags.Contains("unpair")) PhoneUnpaired?.Invoke();
+        else if (tags.Contains("pair")) PhonePaired?.Invoke(text);   // the phone sends its model name when it pairs
         else TextReceived?.Invoke(text, at);
         return id;
     }
 
-    public static async Task Send(string code, string text)
+    public static async Task Send(string code, string text, string tags = "laptop")
     {
         byte[] body = Encoding.UTF8.GetBytes(Crypto.Seal(code, text));
         // ntfy.sh rejects messages over 4096 bytes, so long text goes as a text file the phone reads.
@@ -138,7 +140,7 @@ sealed class Sync
             Content = new ByteArrayContent(body),
         };
         if (asFile) request.Headers.Add("Filename", "clipboard.txt");
-        request.Headers.Add("Tags", "laptop");
+        request.Headers.Add("Tags", tags);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         using var response = await Http.SendAsync(request, timeout.Token);
         response.EnsureSuccessStatusCode();
@@ -147,19 +149,44 @@ sealed class Sync
     /// <summary>Encrypts and sends an image (PNG or JPEG bytes) to the phone as a file.</summary>
     public static Task SendImage(string code, byte[] image) => Put(code, Crypto.SealImage(code, image), "image");
 
-    /// <summary>Encrypts and sends a file with its name. ntfy.sh only sees "file.ferry" and the size.</summary>
-    public static Task SendFile(string code, string name, byte[] contents) => Put(code, Crypto.SealFile(code, name, contents), "file");
+    /// <summary>Encrypts and sends a file with its name. ntfy.sh only sees "file.ferry" and the size. Reports the part sent, 0 to 1.</summary>
+    public static Task SendFile(string code, string name, byte[] contents, IProgress<double> progress) =>
+        Put(code, Crypto.SealFile(code, name, contents), "file", progress);
 
-    static async Task Put(string code, byte[] sealedBytes, string kind)
+    static async Task Put(string code, byte[] sealedBytes, string kind, IProgress<double>? progress = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Put, $"{Server}/{Crypto.Topic(code)}")
         {
-            Content = new ByteArrayContent(sealedBytes),
+            Content = progress is null ? new ByteArrayContent(sealedBytes) : new ProgressContent(sealedBytes, progress),
         };
         request.Headers.Add("Filename", kind + ".ferry");
         request.Headers.Add("Tags", "laptop," + kind);
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));   // a few MB on a slow connection
         using var response = await Http.SendAsync(request, timeout.Token);
         response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>A request body written in 64 KB parts, so the window can show how much is sent.</summary>
+    sealed class ProgressContent(byte[] bytes, IProgress<double> progress) : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context) =>
+            SerializeToStreamAsync(stream, context, CancellationToken.None);
+
+        protected override async Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context, CancellationToken stop)
+        {
+            const int Part = 64 * 1024;
+            for (int at = 0; at < bytes.Length; at += Part)
+            {
+                int n = Math.Min(Part, bytes.Length - at);
+                await stream.WriteAsync(bytes.AsMemory(at, n), stop);
+                progress.Report((double)(at + n) / bytes.Length);
+            }
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = bytes.Length;
+            return true;
+        }
     }
 }

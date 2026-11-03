@@ -37,6 +37,8 @@ sealed class TrayApp : ApplicationContext
     public Settings Settings { get; }
     public LinkState State { get; private set; } = LinkState.Connecting;
     public Crossing? LastCrossing => Settings.History.FirstOrDefault();
+    /// <summary>The file on its way to the phone, its size, and the part sent (0 to 1); null when no file is being sent.</summary>
+    public (string Name, long Bytes, double Done)? Sending { get; private set; }
 
     public TrayApp(EventWaitHandle show, string[] files)
     {
@@ -87,6 +89,7 @@ sealed class TrayApp : ApplicationContext
         sync.ImageReceived += (image, at) => ui.Post(_ => ApplyImage(image, at), null);
         sync.FileReceived += (name, contents, at) => ui.Post(_ => ApplyFile(name, contents, at), null);
         sync.PhonePaired += name => ui.Post(_ => Paired(name), null);
+        sync.PhoneUnpaired += () => ui.Post(_ => PhoneUnpaired(), null);
         sync.MessageSeen += id => ui.Post(_ => { Settings.LastId = id; Settings.Save(); }, null);
         watcher.ClipboardChanged += OnClipboardChanged;
         // After a network change or sleep the old stream is dead, and Sync needs up to 90 s to notice. Reconnect at once.
@@ -386,6 +389,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     /// <summary>Sends files the user chose: Send to, drag and drop, or the tray menu. Copying a file never sends it.</summary>
     public async Task SendFiles(IEnumerable<string> paths)
     {
+        ShowWindow();   // the window shows the progress
         foreach (string path in paths) await SendFile(path);
     }
 
@@ -403,9 +407,20 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
             Popup("File not sent", $"{name} is over 14 MB. Ferry cannot send files that large yet.", ToolTipIcon.Warning, ShowWindow);
             return;
         }
+        bool over = false;   // a progress report can arrive after the send ends; it must not bring the bar back
+        var progress = new Progress<double>(done =>
+        {
+            if (over || Sending is not { } s || (int)(done * 100) == (int)(s.Done * 100)) return;
+            Sending = (name, info.Length, done);
+            ShowSending();
+        });
+        Sending = (name, info.Length, 0);
+        ShowSending();
         try
         {
-            await Sync.SendFile(Settings.Code, name, await File.ReadAllBytesAsync(path));
+            await Sync.SendFile(Settings.Code, name, await File.ReadAllBytesAsync(path), progress);
+            over = true;
+            Sending = null;
             Crossed("Laptop → Phone", name, DateTime.Now, filePath: path);
             if (Settings.Popups) Popup("Sent to " + (Settings.Peer == "" ? "your phone" : Settings.Peer), name + "\nIn Downloads/Ferry on the phone.", ToolTipIcon.None, ShowWindow);
         }
@@ -421,6 +436,23 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         {
             Popup("File not sent", "Ferry could not reach ntfy.sh. Send the file again when you are online.", ToolTipIcon.Warning, ShowWindow);
         }
+        finally
+        {
+            if (!over)
+            {
+                over = true;
+                Sending = null;
+                Changed();
+            }
+        }
+    }
+
+    void ShowSending()
+    {
+        if (Sending is not { } s) return;
+        string tip = $"Ferry · Sending {s.Name}, {(int)(s.Done * 100)}%";
+        tray.Text = tip.Length > 127 ? tip[..127] : tip;
+        window?.Invalidate();
     }
 
     async void PickFiles()
@@ -549,7 +581,34 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         Changed();
     }
 
+    /// <summary>Makes a new pairing code and tells the phone on the old code to unpair too.</summary>
     public void ResetPairing()
+    {
+        string old = Settings.Code;
+        NewPairing();
+        _ = TellPhoneUnpaired(old);
+    }
+
+    /// <summary>If the laptop is offline, the phone is not told. It then stays on the old code, which nothing sends to any more.</summary>
+    static async Task TellPhoneUnpaired(string oldCode)
+    {
+        try
+        {
+            await Sync.Send(oldCode, "unpair", "laptop,unpair");
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+        }
+    }
+
+    void PhoneUnpaired()
+    {
+        string who = Settings.Peer == "" ? "Your phone" : Settings.Peer;
+        NewPairing();
+        Popup("Phone unpaired", $"{who} unpaired Ferry. To pair again, scan the new code with the phone.", ToolTipIcon.Info, ShowWindow);
+    }
+
+    void NewPairing()
     {
         Settings.Code = Crypto.NewCode();
         Settings.Peer = "";

@@ -1,16 +1,21 @@
 package app.ferry;
 
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.PersistableBundle;
+import android.os.SystemClock;
 import android.util.Log;
 import android.widget.Toast;
 
 import java.io.IOException;
+import java.util.Locale;
 
 /**
  * Invisible screen that sends to the laptop: shared or selected text or images if there are some,
@@ -20,6 +25,7 @@ import java.io.IOException;
 public class SendActivity extends Activity {
     /** Set by AutoSendService after a copy. Stays quiet when there is nothing new to send. */
     static final String EXTRA_AUTO = "auto";
+    private static final int PROGRESS = 3;   // notification id; 1 is the connection, 2 the last crossing
     private boolean started, auto;
 
     @Override
@@ -177,7 +183,14 @@ public class SendActivity extends Activity {
                     result = name + " is over 14 MB. Ferry cannot send files that large yet.";
                 } else {
                     try {
-                        Ferry.sendFile(this, name, contents, "phone");
+                        progress(name, contents.length, 0);
+                        long[] shown = {0};   // when the bar last moved: Android drops updates that come too fast
+                        Ferry.sendFile(this, name, contents, "phone", percent -> {
+                            long now = SystemClock.uptimeMillis();
+                            if (now - shown[0] < 250) return;
+                            shown[0] = now;
+                            progress(name, contents.length, percent);
+                        });
                         Ferry.crossedFile(this, Ferry.TO_LAPTOP, name, System.currentTimeMillis(), "");
                         result = "Sent to laptop: " + name;
                         Log.i("Ferry", "send screen: file sent");
@@ -192,9 +205,24 @@ public class SendActivity extends Activity {
                 Log.w("Ferry", "send screen: file unreadable: " + e);
                 result = "Ferry could not read that file";
             }
+            getSystemService(NotificationManager.class).cancel(PROGRESS);
             String r = result;
             runOnUiThread(() -> done(r));
         }).start();
+    }
+
+    /** The "Sending" notification with a bar that fills as the file goes. It stays until the send ends. */
+    private void progress(String name, int bytes, int percent) {
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        nm.createNotificationChannel(new NotificationChannel("sending", "Sending files", NotificationManager.IMPORTANCE_LOW));
+        nm.notify(PROGRESS, new Notification.Builder(this, "sending")
+                .setSmallIcon(R.drawable.ic_tile)
+                .setContentTitle("Sending " + name)
+                .setContentText(percent + "% of " + String.format(Locale.ROOT, "%.1f MB", bytes / 1048576.0))
+                .setProgress(100, percent, false)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .build());
     }
 
     private void done(String message) {

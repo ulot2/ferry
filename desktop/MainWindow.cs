@@ -217,7 +217,7 @@ sealed class MainWindow : Form
     void ConfirmReset()
     {
         var answer = MessageBox.Show(this,
-            "Ferry makes a new pairing code. Your phone stops syncing until you scan the new code.\n\nReset pairing?",
+            "Ferry makes a new pairing code and unpairs your phone. To pair again, scan the new code with the phone.\n\nReset pairing?",
             "Reset pairing", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
         if (answer == DialogResult.Yes) app.ResetPairing();
     }
@@ -285,16 +285,33 @@ sealed class MainWindow : Form
             return;
         }
 
-        // The last crossing.
-        string kick = c is null ? (st.Peer == "" ? "NOT PAIRED YET" : "NO CROSSINGS YET")
-            : "LAST CROSSING · " + (toPhone ? "LAPTOP TO PHONE" : "PHONE TO LAPTOP") + (c.Time.Date == DateTime.Today ? "" : " · " + c.Time.ToString("d MMM").ToUpperInvariant());
-        Chart.DrawTracked(g, kick, kicker, Chart.InkMuted, x, 166 * s, 1.2f * s);
-        string text = c is null ? "Copy something here, or tap Send on your phone."
-            : c.FilePath is not null ? (toPhone ? $"{c.Text}, now in Downloads/Ferry on the phone." : $"{c.Text}, now in Downloads\\Ferry.")
-            : c.ImagePath is not null ? (c.ImagePath == "" ? "An image, now in the phone's clipboard." : "An image, now in your clipboard and Pictures\\Ferry.")
-            : $"“{TrayApp.Preview(c.Text)}”";
-        TextRenderer.DrawText(g, text, crossing, new Rectangle((int)x, (int)(186 * s), (int)w, (int)(46 * s)), Chart.Ink,
-            TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
+        // A file on its way takes the place of the last crossing: its name, then the course filling up as the file goes.
+        if (app.Sending is { } f)
+        {
+            Chart.DrawTracked(g, "SENDING TO " + phone.ToUpperInvariant(), kicker, Chart.InkMuted, x, 166 * s, 1.2f * s);
+            TextRenderer.DrawText(g, f.Name, crossing, new Rectangle((int)x, (int)(184 * s), (int)w, (int)(24 * s)), Chart.Ink,
+                TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+            var track = new RectangleF(x, 214 * s, w, 6 * s);
+            using (var path = Chart.RoundRect(track, 3 * s))
+            using (var fill = new SolidBrush(Chart.Rule)) g.FillPath(fill, path);
+            if (f.Done > 0)
+                using (var path = Chart.RoundRect(track with { Width = Math.Max(6 * s, w * (float)f.Done) }, 3 * s))
+                using (var fill = new SolidBrush(Chart.Course)) g.FillPath(fill, path);
+            TextRenderer.DrawText(g, $"{(int)(f.Done * 100)}% of {f.Bytes / 1048576.0:0.0} MB", small, new Point((int)x, (int)(224 * s)), Chart.InkMuted);
+        }
+        else
+        {
+            // The last crossing.
+            string kick = c is null ? (st.Peer == "" ? "NOT PAIRED YET" : "NO CROSSINGS YET")
+                : "LAST CROSSING · " + (toPhone ? "LAPTOP TO PHONE" : "PHONE TO LAPTOP") + (c.Time.Date == DateTime.Today ? "" : " · " + c.Time.ToString("d MMM").ToUpperInvariant());
+            Chart.DrawTracked(g, kick, kicker, Chart.InkMuted, x, 166 * s, 1.2f * s);
+            string text = c is null ? "Copy something here, or tap Send on your phone."
+                : c.FilePath is not null ? (toPhone ? $"{c.Text}, now in Downloads/Ferry on the phone." : $"{c.Text}, now in Downloads\\Ferry.")
+                : c.ImagePath is not null ? (c.ImagePath == "" ? "An image, now in the phone's clipboard." : "An image, now in your clipboard and Pictures\\Ferry.")
+                : $"“{TrayApp.Preview(c.Text)}”";
+            TextRenderer.DrawText(g, text, crossing, new Rectangle((int)x, (int)(186 * s), (int)w, (int)(46 * s)), Chart.Ink,
+                TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
+        }
 
         // The logbook header and rule; the list itself is the ListBox.
         TextRenderer.DrawText(g, hint == "" ? "Logbook · double-click to copy again" : hint, hint == "" ? italic : body,

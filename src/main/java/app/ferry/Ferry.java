@@ -29,6 +29,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.Locale;
+import java.util.function.IntConsumer;
 
 /** Shared bits: saved state, pairing, history, and talking to ntfy.sh. */
 final class Ferry {
@@ -81,7 +82,20 @@ final class Ferry {
         return name == null || name.trim().isEmpty() ? Build.MODEL : name.trim();
     }
 
+    /** You tapped Unpair: the laptop is told, and makes a new pairing code. If the phone is offline, the laptop is not told. */
     static void unpair(Context c) {
+        String code = code(c);
+        if (!code.isEmpty()) new Thread(() -> {
+            try {
+                send(code, "unpair", "phone,unpair");
+            } catch (IOException ignored) {
+            }
+        }).start();
+        forget(c);
+    }
+
+    /** Unpairs without telling the laptop: for when the laptop itself unpaired. */
+    static void forget(Context c) {
         c.stopService(new Intent(c, SyncService.class));
         prefs(c).edit().clear().apply();
     }
@@ -193,6 +207,10 @@ final class Ferry {
     static void send(Context c, String text, String tags) throws IOException {
         String code = code(c);
         if (code.isEmpty()) throw new IOException("Not paired");
+        send(code, text, tags);
+    }
+
+    private static void send(String code, String text, String tags) throws IOException {
         String body;
         try {
             body = Crypto.seal(code, text);
@@ -238,18 +256,25 @@ final class Ferry {
         }
     }
 
-    /** Encrypts and sends a file with its name. ntfy.sh only sees "file.ferry" and the size. Blocks; call it off the main thread. */
-    static void sendFile(Context c, String name, byte[] contents, String tags) throws IOException {
+    /**
+     * Encrypts and sends a file with its name. ntfy.sh only sees "file.ferry" and the size.
+     * Reports the percent sent to progress. Blocks; call it off the main thread.
+     */
+    static void sendFile(Context c, String name, byte[] contents, String tags, IntConsumer progress) throws IOException {
         String code = code(c);
         if (code.isEmpty()) throw new IOException("Not paired");
         try {
-            put(code, Crypto.sealFile(code, name, contents), tags, "file");
+            put(code, Crypto.sealFile(code, name, contents), tags, "file", progress);
         } catch (GeneralSecurityException e) {
             throw new IOException(e);
         }
     }
 
     private static void put(String code, byte[] body, String tags, String kind) throws IOException {
+        put(code, body, tags, kind, percent -> {});
+    }
+
+    private static void put(String code, byte[] body, String tags, String kind, IntConsumer progress) throws IOException {
         HttpURLConnection con = (HttpURLConnection) new URL(SERVER + Crypto.topic(code)).openConnection();
         try {
             con.setRequestMethod("PUT");
@@ -260,7 +285,11 @@ final class Ferry {
             con.setRequestProperty("Filename", kind + ".ferry");
             con.setRequestProperty("Tags", tags + "," + kind);
             try (OutputStream out = con.getOutputStream()) {
-                out.write(body);
+                // In 64 KB parts: with a fixed length, each write goes to the network, so the percent is real.
+                for (int at = 0, part = 64 * 1024; at < body.length; at += part) {
+                    out.write(body, at, Math.min(part, body.length - at));
+                    progress.accept((int) (100L * Math.min(at + part, body.length) / body.length));
+                }
             }
             int status = con.getResponseCode();
             if (status == 413 || status == 429) throw new LimitException(status);

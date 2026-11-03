@@ -124,6 +124,10 @@ public class SyncService extends Service {
                     String sealed = m.has("attachment") ? fetchText(m.getJSONObject("attachment")) : m.optString("message");
                     String text = Crypto.open(code, sealed);   // null: not from our laptop, ignore it
                     if (text == null || text.isEmpty()) continue;
+                    if (hasTag(m, "unpair")) {
+                        laptopUnpaired();
+                        return;
+                    }
                     long at = m.optLong("time", System.currentTimeMillis() / 1000) * 1000;
                     Ferry.crossed(this, Ferry.TO_PHONE, text, at);
                     // A copy that waited more than 10 minutes goes to history only; it must not replace what you copied since.
@@ -164,6 +168,15 @@ public class SyncService extends Service {
             }
         };
         getSystemService(ConnectivityManager.class).registerDefaultNetworkCallback(netWatch);
+    }
+
+    /** The laptop reset its pairing. Its old code is dead, so this phone unpairs too and says so. */
+    private void laptopUnpaired() {
+        String peer = Ferry.prefs(this).getString("peer", "");
+        running = false;
+        notifyCrossing("Unpaired from " + (peer.isEmpty() ? "your laptop" : peer),
+                "The laptop reset its pairing. To pair again, open Ferry and scan the new code.", null);
+        main.post(() -> Ferry.forget(this));
     }
 
     /** Sends the text that SendActivity could not send. A text older than 10 minutes is dropped, the same rule as for arrivals. */
