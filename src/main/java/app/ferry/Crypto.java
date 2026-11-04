@@ -27,6 +27,7 @@ final class Crypto {
     private static final byte[] AAD_INCOMING = "ferry1-incoming".getBytes(StandardCharsets.UTF_8);
     private static final byte[] AAD_LAN = "ferry1-lan".getBytes(StandardCharsets.UTF_8);
     private static final byte[] AAD_HELLO = "ferry1-hello".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] AAD_NOTIFICATION = "ferry1-notification".getBytes(StandardCharsets.UTF_8);
     private static final SecureRandom RNG = new SecureRandom();
 
     /** Lowercases and drops spaces and dashes, so a typed code works however it was grouped. */
@@ -78,6 +79,11 @@ final class Crypto {
 
     static String openLan(String code, String message) {
         return open(code, message, AAD_LAN);
+    }
+
+    /** A phone notification for the laptop (JSON: app, title, text). Its own AAD, so it can never be opened as a copy. */
+    static String sealNotification(String code, String json) throws GeneralSecurityException {
+        return seal(code, json, AAD_NOTIFICATION);
     }
 
     /** The first thing on a direct connection: the transfer id, sealed, so only our other device gets in. */

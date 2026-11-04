@@ -20,6 +20,7 @@ sealed class Sync
     public event Action<string, string, DateTime>? FileReceived;   // name, and a temporary file that the handler moves
     public event Action<string, long, DateTime>? FileComing;   // name and size, before the file itself
     public event Action<JsonElement, DateTime>? FileOffered;   // the phone offers a file straight over Wi-Fi
+    public event Action<string, string, string>? NotificationReceived;   // app, title, text: a phone notification from Roost
     public event Action<string>? PhonePaired;
     public event Action? PhoneUnpaired;   // the phone tapped Unpair
     public event Action<string>? MessageSeen;   // message id, for catching up after a restart
@@ -147,6 +148,23 @@ sealed class Sync
                     case "accept": Lan.Answer(message); break;
                     case "offer": FileOffered?.Invoke(message, at); break;
                 }
+            }
+            catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)
+            {
+                // Not a message this Ferry knows. Skip it, or the stream would replay it forever.
+            }
+            return id;
+        }
+
+        if (tags.Contains("notification"))
+        {
+            // A phone notification is only worth a pop-up when it is new, not when a reconnect replays it.
+            if (DateTime.Now - at > TimeSpan.FromMinutes(2) || Crypto.OpenNotification(code, sealedText) is not { } json) return id;
+            try
+            {
+                using var n = JsonDocument.Parse(json);
+                var r = n.RootElement;
+                NotificationReceived?.Invoke(r.GetProperty("app").GetString() ?? "", r.GetProperty("title").GetString() ?? "", r.GetProperty("text").GetString() ?? "");
             }
             catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)
             {

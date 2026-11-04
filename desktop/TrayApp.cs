@@ -94,6 +94,7 @@ sealed class TrayApp : ApplicationContext
         sync.FileReceived += (name, path, at) => ui.Post(_ => ApplyFile(name, path, at), null);
         sync.FileComing += (name, bytes, at) => ui.Post(_ => FileComing(name, bytes, at), null);
         sync.FileOffered += (offer, at) => ui.Post(_ => ReceiveDirect(offer, at), null);
+        sync.NotificationReceived += (app, title, text) => ui.Post(_ => PhoneNotification(app, title, text), null);
         sync.PhonePaired += name => ui.Post(_ => Paired(name), null);
         sync.PhoneUnpaired += () => ui.Post(_ => PhoneUnpaired(), null);
         sync.MessageSeen += id => ui.Post(_ => { Settings.LastId = id; Settings.Save(); }, null);
@@ -630,6 +631,14 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     }
 
     /// <summary>The phone is about to send a file: say what is coming before it is all here.</summary>
+    /// <summary>A phone notification that Roost passed on. Shown only; Ferry keeps nothing of it.</summary>
+    void PhoneNotification(string app, string title, string text)
+    {
+        if (Settings.Paused) return;
+        string heading = app == "" ? title : title == "" ? app : app + " · " + title;
+        Popup(heading == "" ? "Phone notification" : heading, text == "" ? " " : Preview(text), ToolTipIcon.None, () => { });
+    }
+
     void FileComing(string name, long bytes, DateTime at)
     {
         if (Settings.Popups && !Settings.Paused && DateTime.Now - at < TimeSpan.FromMinutes(10))

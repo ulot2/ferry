@@ -12,6 +12,11 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
+    <!-- To check Roost's signing key before taking its notifications (see NotificationReceiver). -->
+    <queries>
+        <package android:name="app.roost" />
+    </queries>
+
     <application
         android:label="Ferry"
         android:icon="@drawable/ic_launcher"
@@ -105,6 +110,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Phone notifications from Roost, shown on the laptop. Exported, but it takes them only from Roost itself. -->
+        <receiver android:name=".NotificationReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="app.ferry.action.SHOW_NOTIFICATION" />
             </intent-filter>
         </receiver>
     </application>

@@ -20,6 +20,7 @@ static class Crypto
     static readonly byte[] AadIncoming = Encoding.UTF8.GetBytes("ferry1-incoming");
     static readonly byte[] AadLan = Encoding.UTF8.GetBytes("ferry1-lan");
     static readonly byte[] AadHello = Encoding.UTF8.GetBytes("ferry1-hello");
+    static readonly byte[] AadNotification = Encoding.UTF8.GetBytes("ferry1-notification");
 
     public static string NewCode() => RandomNumberGenerator.GetString(Alphabet, 26);
 
@@ -46,6 +47,9 @@ static class Crypto
     public static string SealLan(string code, string json) => Seal(code, json, AadLan);
 
     public static string? OpenLan(string code, string message) => Open(code, message, AadLan);
+
+    /// <summary>A phone notification (JSON: app, title, text). Its own AAD, so it can never be opened as a copy.</summary>
+    public static string? OpenNotification(string code, string message) => Open(code, message, AadNotification);
 
     /// <summary>The first thing on a direct connection: the transfer id, sealed, so only our other device gets in.</summary>
     public static byte[] SealHello(string code, byte[] id) => SealRaw(code, id, AadHello);

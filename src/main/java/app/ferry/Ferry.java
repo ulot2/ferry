@@ -264,6 +264,18 @@ final class Ferry {
         }
     }
 
+    /** A phone notification from Roost, for a pop-up on the laptop. Each part is cut to a short preview, so the message stays under ntfy.sh's 4 KB. */
+    static void sendNotification(Context c, String app, String title, String text) throws IOException {
+        String code = code(c);
+        if (code.isEmpty()) throw new IOException("Not paired");
+        try {
+            JSONObject m = new JSONObject().put("app", preview(app)).put("title", preview(title)).put("text", preview(text));
+            post(code, Crypto.sealNotification(code, m.toString()), "phone,notification");
+        } catch (JSONException | GeneralSecurityException e) {
+            throw new IOException(e);
+        }
+    }
+
     private static void post(String code, String body, String tags) throws IOException {
         // ntfy.sh turns bodies over 4 KB into a text file by itself; the laptop reads both.
         HttpURLConnection con = (HttpURLConnection) new URL(SERVER + Crypto.topic(code)).openConnection();
