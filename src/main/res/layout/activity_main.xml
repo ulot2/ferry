@@ -45,7 +45,7 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                 android:layout_height="32dp"
                 android:layout_gravity="top|end"
                 android:layout_marginTop="18dp"
-                android:layout_marginEnd="18dp"
+                android:layout_marginEnd="62dp"
                 android:background="@drawable/bg_pill"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
@@ -67,6 +67,19 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                     android:textColor="@color/ink"
                     android:textSize="14sp" />
             </LinearLayout>
+
+            <!-- Settings, on a pill like the status, so it reads on the chart. 44dp touch target around a 32dp pill. -->
+            <ImageButton
+                android:id="@+id/settings"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_settings"
+                android:contentDescription="Settings"
+                android:scaleType="center"
+                android:src="@drawable/ic_settings" />
         </FrameLayout>
 
         <LinearLayout
@@ -108,7 +121,7 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                 android:layout_marginTop="18dp"
                 android:text="Send clipboard to laptop" />
 
-            <!-- Notices: shown only when they apply. -->
+            <!-- Notices: at most one at a time, the most urgent (see MainActivity.render). The rest lives in Settings. -->
             <LinearLayout
                 android:id="@+id/updateCard"
                 style="@style/Ferry.Notice"
@@ -139,18 +152,19 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                 style="@style/Ferry.Notice"
                 android:visibility="gone">
 
+                <!-- Ferry Auto only, while automatic sending is off. -->
                 <TextView
-                    android:id="@+id/autoTitle"
                     style="@style/Ferry.Title"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                    android:layout_height="wrap_content"
+                    android:text="Send copies automatically" />
 
                 <TextView
-                    android:id="@+id/autoBody"
                     style="@style/Ferry.Body"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp" />
+                    android:layout_marginTop="4dp"
+                    android:text="Skip the Send button. Ferry uses Android\'s accessibility permission to notice taps on Copy. It reads only the label of what you tap, not the rest of the screen.\n\nIf the switch is greyed out, open App info, tap the ⋮ menu, then Allow restricted settings." />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -162,7 +176,8 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                     <Button
                         android:id="@+id/autoToggle"
                         style="@style/Ferry.Button.Secondary"
-                        android:layout_width="wrap_content" />
+                        android:layout_width="wrap_content"
+                        android:text="Turn on" />
 
                     <Space
                         android:layout_width="0dp"
@@ -203,32 +218,6 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                     android:text="Allow background use" />
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/xiaomiCard"
-                style="@style/Ferry.Notice"
-                android:visibility="gone">
-
-                <TextView
-                    style="@style/Ferry.Title"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Turn on Autostart" />
-
-                <TextView
-                    style="@style/Ferry.Body"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Xiaomi phones stop apps that are not on the Autostart list. Open Settings &gt; Apps &gt; Ferry and turn on Autostart." />
-
-                <Button
-                    android:id="@+id/appSettings"
-                    style="@style/Ferry.Button.Secondary"
-                    android:layout_width="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="Open app settings" />
-            </LinearLayout>
-
             <!-- The logbook: earlier crossings. Rows come from res/layout/item_crossing.xml. -->
             <LinearLayout
                 android:id="@+id/historyCard"
@@ -249,7 +238,7 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Logbook · tap to copy again" />
+                        android:text="Logbook · tap to copy again, or to open a file" />
 
                     <Button
                         android:id="@+id/clearHistory"
@@ -270,45 +259,11 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                     android:orientation="vertical" />
             </LinearLayout>
 
-            <!-- Quick switches as chips. -->
-            <LinearLayout
-                android:id="@+id/chips"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <Button
-                    android:id="@+id/autoChip"
-                    style="@style/Ferry.Chip"
-                    android:layout_height="44dp" />
-
-                <Button
-                    android:id="@+id/imagesChip"
-                    style="@style/Ferry.Chip"
-                    android:layout_height="44dp" />
-
-                <Button
-                    android:id="@+id/screenshotsChip"
-                    style="@style/Ferry.Chip"
-                    android:layout_height="44dp" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/screenshotsBody"
-                style="@style/Ferry.Body"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textSize="13sp"
-                android:visibility="gone" />
-
-            <!-- Pairing. Moved to the top in code while not paired. -->
+            <!-- Pairing: only until paired. Afterwards it lives in Settings. -->
             <LinearLayout
                 android:id="@+id/pairCard"
                 style="@style/Ferry.Notice"
-                android:layout_marginTop="24dp">
+                android:layout_marginTop="18dp">
 
                 <TextView
                     android:id="@+id/pairTitle"
@@ -375,8 +330,9 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
 
                     <Button
                         android:id="@+id/scan"
-                        style="@style/Ferry.Button.Secondary"
-                        android:layout_width="wrap_content" />
+                        style="@style/Ferry.Button.Primary"
+                        android:layout_width="wrap_content"
+                        android:text="Scan QR code" />
 
                     <Space
                         android:layout_width="0dp"

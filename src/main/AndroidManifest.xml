@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -10,6 +11,11 @@
     <!-- Only for "Send screenshots automatically" (off by default), to notice new screenshots. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+    <!-- To check Roost's signing key before taking its notifications (see NotificationReceiver). -->
+    <queries>
+        <package android:name="app.roost" />
+    </queries>
 
     <application
         android:label="Ferry"
@@ -38,6 +44,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Settings" />
+
         <!-- Invisible: reads the clipboard (or shared/selected text) and sends it to the laptop. -->
         <activity
             android:name=".SendActivity"
@@ -52,6 +63,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="image/*" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.PROCESS_TEXT" />
@@ -93,6 +110,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Phone notifications from Roost, shown on the laptop. Exported, but it takes them only from Roost itself. -->
+        <receiver android:name=".NotificationReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="app.ferry.action.SHOW_NOTIFICATION" />
             </intent-filter>
         </receiver>
     </application>

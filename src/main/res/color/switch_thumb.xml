@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Switch knob: course when on, ink muted when off (the page color vanished on the night chart), rule when disabled. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/rule" android:state_enabled="false" />
+    <item android:color="@color/course" android:state_checked="true" />
+    <item android:color="@color/ink_muted" />
+</selector>

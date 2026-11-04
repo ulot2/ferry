@@ -1,6 +1,6 @@
 # Ferry
 
-Ferry moves clipboard text and images between a Windows laptop and an Android phone.
+Ferry moves clipboard text and images between a Windows laptop and an Android phone. It also sends files when you choose to: any size on the same Wi-Fi, and up to 90 MB from anywhere.
 
 When you copy text on the laptop, the text goes into the clipboard of the phone within a second or two. When you copy text on the phone, Ferry sends it to the laptop with one tap, or by itself in Ferry Auto. You do not need an account. The two devices pair when the phone scans a QR code, and all text is encrypted end to end (only your two devices can read it).
 
@@ -18,6 +18,8 @@ The QR code holds a pairing code: 26 random letters and numbers. Both devices ma
 - An encryption key. The key never leaves your devices.
 
 Each device encrypts the text with the key (AES-256-GCM) before it sends the text to the topic. ntfy.sh only sees encrypted text. Each device ignores messages that were not encrypted with your key.
+
+Files take a faster road when the two devices are on the same Wi-Fi. The phone opens a port on the Wi-Fi network and tells the laptop the address through ntfy.sh. The laptop then connects to the phone directly, and the file goes from device to device. Ferry encrypts the file with the same key, in parts of 1 MB. Because the laptop always makes the connection, Windows Firewall does not ask for permission.
 
 ## Install
 
@@ -56,8 +58,8 @@ If the scanner does not open, tap **Type the code** on the phone. Then type the 
 
 After pairing, do these steps on the phone:
 
-1. Tap **Allow background use**. Without it, Android cuts the connection when the phone sleeps.
-2. On a Xiaomi, Redmi or POCO phone, open **Settings > Apps > Ferry** and turn on **Autostart**.
+1. Tap **Allow background use**. Without it, Android cuts the connection when the phone sleeps. This step is also in Ferry under **Settings > Keep Ferry running**.
+2. On a Xiaomi, Redmi or POCO phone, open Ferry **Settings**, then tap **Open app settings** and turn on **Autostart**.
 3. In Ferry Auto: turn on automatic sending (see [Ferry Auto](#ferry-auto-automatic-sending)).
 4. Optional: add the **Send clipboard** tile to the quick settings panel.
 
@@ -74,24 +76,30 @@ After pairing, do these steps on the phone:
 When text arrives, the other device shows it:
 
 - On the phone, a notification without sound shows the text for 8 seconds.
-- On the laptop, a pop-up shows the text. To stop the pop-ups, turn off the **Pop-ups** chip in the window, or clear **Show pop-ups** in the tray menu.
+- On the laptop, a pop-up shows the text. To stop the pop-ups, turn off **Pop-ups** in Settings in the window, or clear **Show pop-ups** in the tray menu.
 - If the text is one web link, the notice offers to open it. On the phone, tap the notification or **Open link**. On the laptop, click the pop-up. Ferry never opens a link by itself, and it only opens web links (http and https).
 
 ### What the screen shows
 
 Both apps show your clipboard as a sea chart. The laptop and the phone are two harbors, and a magenta course line joins them. The arrow on the line points the way the last crossing (transfer) went, and the label on the line gives its time.
 
-Under the chart, the newest crossing shows in large text. The earlier ones are in the **logbook**: the app keeps the last 10. To copy an earlier one again, tap it on the phone, or double-click it on the laptop.
+Under the chart, the newest crossing shows in large text. The earlier ones are in the **logbook**: the app keeps the last 10. The logbook groups them under **Today**, **Yesterday** and **Earlier**. An icon on each row shows what crossed: text, a web link, an image or a file. To copy an earlier one again, tap it on the phone, or double-click it on the laptop.
 
 The pill in the top-right corner of the chart shows the connection:
 
 - **Steady link** (green dot): connected.
-- **Adrift** (red dot): offline. Ferry tries again every 5 seconds.
+- **Adrift** (red dot): offline. Ferry tries again every 5 seconds. When the device changes network or wakes from sleep, Ferry connects again at once.
 - **Connecting**, **Paused** or **Not paired** (grey dot).
 
-The switches are chips under the logbook: a filled chip is on, an outlined chip is off.
+The main screen shows only the chart, the last crossing and the logbook. On the phone it also shows **Send clipboard**, and on the laptop **Send a file…**. When something needs action, one notice shows under it, for example an update or background use.
 
-Both apps follow the light or dark setting of the device. Light mode is a day chart (pale blue water). Dark mode is a soft charcoal night chart.
+Everything that you set once is in **Settings**. To open it, click or tap the round button with three sliders, right of the pill. In the Settings of each app:
+
+- **Appearance**: **System**, **Light** or **Dark**. Light is a day chart (pale blue water). Dark is a soft charcoal night chart. System follows the light or dark mode of the device. Each device keeps its own choice.
+- **Syncing**: images, screenshots and automatic sending on the phone. Pause syncing, pop-ups, images and Start with Windows on the laptop. Each is a switch with a short line that says what it does.
+- **Pairing**: the paired device, **Unpair** on the phone, and **Show pairing code** and **Reset pairing** on the laptop.
+- **Keep Ferry running** (phone): background use, and Autostart on Xiaomi phones.
+- **About**: the version, and **Check for updates**.
 
 If a device is offline for a short time, it gets the missed copies when it connects again. A copy that is more than 10 minutes old goes into the history only. It does not replace what is in your clipboard now.
 
@@ -137,13 +145,13 @@ Ferry moves images too. Images are encrypted the same way as text.
 | Laptop to phone | Copy an image, or take a screenshot with **Win+Shift+S** or **PrtScn**. It goes into the phone clipboard and into **Pictures/Ferry** on the phone. |
 | Phone to laptop, a copied image | Copy the image (for example **Copy image** in Chrome). Ferry Auto sends it by itself. In Ferry, tap **Send clipboard**. |
 | Phone to laptop, any image | Tap **Share** and choose **Send to laptop**. |
-| Phone to laptop, screenshots | Turn on the **Screenshots** chip in Ferry (see below). |
+| Phone to laptop, screenshots | Turn on **Send screenshots** in Ferry Settings (see below). |
 
 On the laptop, an image from the phone goes into the clipboard (press **Ctrl+V** to paste) and into **Pictures\Ferry**.
 
-The **Screenshots** chip is off until you turn it on, because screenshots can show private things. When you turn it on, Android asks for the Photos permission. Choose **Allow all**: with "Allow limited access", Ferry cannot see new screenshots.
+**Send screenshots** is off until you turn it on, because screenshots can show private things. When you turn it on, Android asks for the Photos permission. Choose **Allow all**: with "Allow limited access", Ferry cannot see new screenshots.
 
-To stop images in either direction, turn off the **Images** chip in Ferry on the phone or in the laptop window. On the laptop, **Send and receive images** in the tray menu does the same.
+To stop images in either direction, turn off **Images** in Ferry Settings on the phone or in the laptop window. On the laptop, **Send and receive images** in the tray menu does the same.
 
 Limits for images:
 
@@ -151,6 +159,53 @@ Limits for images:
 - Ferry does not send an image that is still larger than 10 MB.
 - On a slow connection, an image takes a few seconds.
 - ntfy.sh keeps image files for 3 hours. A device that is offline for longer does not get the image.
+
+## Files
+
+Ferry sends other files too, for example videos. Files are encrypted the same way as text, and the file name is encrypted too. Ferry never sends a file because you copied it. You send each file yourself.
+
+Ferry sends a file in one of two ways:
+
+- Direct: when the phone and the laptop are on the same Wi-Fi, the file goes straight from one device to the other. A file of any size can go this way. The speed depends on your Wi-Fi, often 20 to 80 MB per second. This also works when the laptop uses the phone's hotspot.
+- Through ntfy.sh: when the devices are on different networks, or when the direct connection fails, the file goes through ntfy.sh. This works for files up to 90 MB.
+
+Ferry tries the direct way first. If the other device does not answer within a few seconds, Ferry uses ntfy.sh.
+
+| To send | Do this |
+|---|---|
+| Laptop to phone, from File Explorer | Right-click the file, then choose **Send to > Ferry (phone)**. On Windows 11, **Send to** is under **Show more options**. |
+| Laptop to phone, from the Ferry window | Drag the file onto the window. |
+| Laptop to phone, from the tray | Click **Send a file to the phone…** in the tray menu, then choose the file. |
+| Phone to laptop | Tap **Share** on the file and choose **Send to laptop**. |
+
+You can send more than one file at a time on both devices. Ferry sends them one after the other. If you share several photos from the phone, they arrive as files in Downloads, not in the clipboard.
+
+While a file is sent, a bar shows how much of it is sent. On the laptop, the bar is in the Ferry window, which opens by itself. On the phone, the bar is in a notification.
+
+When a file starts to cross, the other device shows a pop-up with the name and size of the file. A large file takes a few minutes, so this pop-up tells you that it is on its way.
+
+When a file arrives:
+
+- On the laptop, it goes into **Downloads\Ferry**. Click the pop-up to show the file in File Explorer. Windows marks the file as from the internet, as it does for a browser download, so Windows warns before it runs a program from it.
+- On the phone, it goes into **Downloads/Ferry**. Tap the notification to open the file.
+- If a file with the same name is already there, Ferry keeps both. The new file gets a number, for example `report (2).pdf`.
+
+To use an earlier file again, find it in the logbook. On the laptop, double-click it to copy the file, then paste it in a folder or an email. On the phone, tap a file that came to the phone to open it.
+
+Limits for direct files:
+
+- Both devices must be on the same network. Some public and guest Wi-Fi networks stop devices from connecting to each other. On such a network, Ferry uses ntfy.sh.
+- If the Wi-Fi connection breaks while a file crosses, Ferry sends a file up to 90 MB again through ntfy.sh. Send a larger file again yourself.
+
+Limits for files through ntfy.sh:
+
+- Ferry does not send a file that is larger than 90 MB this way.
+- ntfy.sh takes one file of at most 15 MB. Ferry sends a larger file in parts of 14 MB, and the other device puts the parts together.
+- ntfy.sh keeps at most 100 MB of your files at a time, for 3 hours. If you send more, ntfy.sh refuses the file until older files expire. As a result, you can send one 90 MB file in 3 hours, but not two.
+- A device that is offline for more than 3 hours does not get the file.
+- A file that does not reach ntfy.sh does not wait. Send it again when you are online.
+- If Ferry restarts while a large file arrives, the other device does not get that file. Send it again.
+- A phone or laptop with an older Ferry gets files up to 14 MB only, and never directly. Update both apps.
 
 ## Updates
 
@@ -165,15 +220,18 @@ Your pairing and history stay after an update.
 
 - Text is encrypted end to end. ntfy.sh stores encrypted copies for up to 12 hours, so a device that was offline can catch up. ntfy.sh cannot read them.
 - ntfy.sh can see when a message is sent, how large it is, and which device type sent it.
+- A direct file crosses your own Wi-Fi, encrypted. Another device on the network can see that a transfer occurs, but it cannot read the file. The phone accepts a connection only from a device that has your pairing code.
 - The pairing code is the only secret. A person who has the code can read your clipboard text and send text to it. Do not share the code or the QR code.
-- If the code leaks, click **Reset pairing** in the laptop window. Then scan the new code with the phone.
+- If the code leaks, click **Reset pairing** in Settings in the laptop window. Then scan the new code with the phone.
+- When you unpair on one device, the other device unpairs too: **Reset pairing** on the laptop, or **Unpair** in Settings on the phone. The device that unpairs must be online to tell the other one. After an unpair, the laptop shows a new code to scan.
 - On the laptop, Ferry does not send copies that apps mark as private or as "do not share to other devices" (password managers do this).
 - On the phone, Ferry Auto does not send copies that apps mark as sensitive (password managers do this on Android 13 and later). If you tap **Send clipboard** yourself, Ferry sends the copy, because you chose to.
 - The history stays on each device, in storage that only Ferry (phone) or your Windows user (laptop) can read. **Clear** removes it.
 
 ## Limits
 
-- Ferry moves text and images. It does not move other files.
+- Ferry sends a file larger than 90 MB only when both devices are on the same Wi-Fi. It does not send folders.
+- Ferry is not in the Windows **Share** window. Use **Send to** (see Files).
 - ntfy.sh limits one message to 4,096 bytes. Ferry sends longer text as a text file, and the other device reads the file.
 - The QR scanner needs Google Play services. On a phone without them, type the code.
 
@@ -183,13 +241,13 @@ Your pairing and history stay after an update.
 
 **The light is red.** Make sure that the device is online. Ferry connects again by itself.
 
-**Laptop copies stop arriving on the phone.** Open Ferry on the phone. If a "Keep the link open" card shows, tap **Allow background use**. On a Xiaomi phone, also turn on Autostart.
+**Laptop copies stop arriving on the phone.** Open Ferry on the phone. If a "Keep the link open" notice shows, tap **Allow background use**. On a Xiaomi phone, also turn on Autostart (see **Settings > Keep Ferry running**).
 
 **Automatic sending stopped.** Some phones turn off accessibility services to save power. Open Ferry and look at the "Send copies automatically" card. If it says **Turn on**, turn it on again.
 
 **The phone says "Pair again".** This version encrypts the text, so phones paired with an older version must pair again. Update Ferry on the laptop, then scan the new QR code.
 
-**The phone says "Not sent".** The phone could not reach ntfy.sh. Copy the text again when the phone is online.
+**The phone or the laptop says "Not sent yet".** The device could not reach ntfy.sh. Ferry keeps the text and sends it by itself when the link is back. If the link is not back within 10 minutes, Ferry drops the text. Then copy it again. Images do not wait: copy an image again when the device is online.
 
 ## Build and release
 

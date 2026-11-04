@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logbook: an image or screenshot. A frame with a hill and a sun. Tinted in the row. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M5,4h14a2,2 0 0,1 2,2v12a2,2 0 0,1 -2,2H5a2,2 0 0,1 -2,-2V6a2,2 0 0,1 2,-2z M5,6v12h14V6z" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M6.5,16.5l3.5,-4.5l2.8,3.3l2,-2.4l2.7,3.6z M14.5,8.8a1.5,1.5 0 1,0 3,0a1.5,1.5 0 1,0 -3,0z" />
+</vector>
