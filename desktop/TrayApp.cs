@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using Windows.UI.Notifications;
 
 namespace Ferry;
 
@@ -34,7 +35,7 @@ sealed class TrayApp : ApplicationContext
     string? pending;   // a copy that could not be sent; it goes when the link is back
     DateTime pendingAt;
     (string Version, string Url)? update;
-    Action balloonClick = () => { };
+    ToastNotification? toast;   // the last pop-up, kept so that a click on it still reaches Ferry
 
     public Settings Settings { get; }
     public LinkState State { get; private set; } = LinkState.Connecting;
@@ -61,6 +62,7 @@ sealed class TrayApp : ApplicationContext
         if (firstRun) StartWithWindows = true;
         Chart.Apply(Settings.Theme);
         Shortcuts();
+        RegisterToasts();
 
         pauseItem.Checked = Settings.Paused;
         pauseItem.CheckedChanged += (_, _) => Paused = pauseItem.Checked;
@@ -86,7 +88,6 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add("Quit Ferry", null, (_, _) => Quit());
         tray.ContextMenuStrip = menu;
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
-        tray.BalloonTipClicked += (_, _) => balloonClick();
 
         sync.StateChanged += s => ui.Post(_ => { State = s; Changed(); if (s == LinkState.Connected) SendPending(); }, null);
         sync.TextReceived += (t, at) => ui.Post(_ => Apply(t, at), null);
@@ -264,10 +265,56 @@ sealed class TrayApp : ApplicationContext
         window?.Render();
     }
 
-    void Popup(string title, string text, ToolTipIcon icon, Action onClick)
+    /// <summary>
+    /// A Windows notification. When Windows is busy (a full-screen app, Do not disturb), it waits in the
+    /// notification center (Win+N). A tray balloon is dropped then, so it is only the fallback.
+    /// A click works while Ferry runs; Windows cannot start a closed Ferry from it.
+    /// </summary>
+    void Popup(string title, string text, Action onClick)
     {
-        balloonClick = onClick;
-        tray.ShowBalloonTip(5000, title, text, icon);
+        try
+        {
+            var xml = ToastNotificationManager.GetTemplateContent(ToastTemplateType.ToastText02);
+            var lines = xml.GetElementsByTagName("text");
+            lines[0].AppendChild(xml.CreateTextNode(title));
+            lines[1].AppendChild(xml.CreateTextNode(text));
+            toast = new ToastNotification(xml);
+            toast.Activated += (_, _) => ui.Post(_ => onClick(), null);
+            ToastNotificationManager.CreateToastNotifier(ToastAppId).Show(toast);
+        }
+        catch (Exception)
+        {
+            // Not registered (the registry write failed) or notifications are broken: a balloon still works most of the time.
+            tray.ShowBalloonTip(5000, title, text, ToolTipIcon.None);
+        }
+    }
+
+    const string ToastAppId = "Ferry.Desktop";
+
+    /// <summary>
+    /// Tells Windows the name and icon of Ferry's notifications. Ferry is a plain .exe with no package identity,
+    /// so Windows needs this entry before it shows them. Written on every start, like the shortcuts.
+    /// </summary>
+    static void RegisterToasts()
+    {
+        try
+        {
+            string icon = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Ferry", "ferry.png");
+            using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\AppUserModelId\" + ToastAppId))
+            {
+                key.SetValue("DisplayName", "Ferry");
+                key.SetValue("IconUri", icon);
+            }
+            // After the entry: if Windows holds the old icon open, the notifications still show, with that icon.
+            Directory.CreateDirectory(Path.GetDirectoryName(icon)!);
+            using var appIcon = Chart.AppIcon(256, null);
+            using var bmp = appIcon.ToBitmap();
+            bmp.Save(icon, System.Drawing.Imaging.ImageFormat.Png);
+        }
+        catch (Exception)
+        {
+            // Without the entry, Popup falls back to tray balloons. Ferry must still start.
+        }
     }
 
     async void OnClipboardChanged()
@@ -307,7 +354,7 @@ sealed class TrayApp : ApplicationContext
         {
             last = null;
             (pending, pendingAt) = (text, DateTime.Now);
-            Popup("Not sent yet", "Ferry could not reach ntfy.sh. It sends the text when the link is back.", ToolTipIcon.Warning, ShowWindow);
+            Popup("Not sent yet", "Ferry could not reach ntfy.sh. It sends the text when the link is back.", ShowWindow);
         }
     }
 
@@ -372,8 +419,8 @@ sealed class TrayApp : ApplicationContext
 string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         if (!Settings.Popups) return;
         // A copied link gets a pop-up that opens it; anything else just says what arrived.
-        if (Link(text) is { } url) Popup("Link from " + from, url.AbsoluteUri + "\nClick to open it.", ToolTipIcon.None, () => OpenLink(url));
-        else Popup("Copied from " + from, Preview(text), ToolTipIcon.None, ShowWindow);
+        if (Link(text) is { } url) Popup("Link from " + from, url.AbsoluteUri + "\nClick to open it.", () => OpenLink(url));
+        else Popup("Copied from " + from, Preview(text), ShowWindow);
     }
 
     async Task SendImage(byte[] image)
@@ -384,7 +431,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         byte[]? small = await Task.Run(() => ImageClip.Shrink(image));
         if (small is null)
         {
-            Popup("Image not sent", "It is over 10 MB, even after Ferry made it smaller.", ToolTipIcon.Warning, ShowWindow);
+            Popup("Image not sent", "It is over 10 MB, even after Ferry made it smaller.", ShowWindow);
             return;
         }
         try
@@ -395,7 +442,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
             lastImage = null;
-            Popup("Image not sent", "Ferry could not reach ntfy.sh. Copy the image again when you are online.", ToolTipIcon.Warning, ShowWindow);
+            Popup("Image not sent", "Ferry could not reach ntfy.sh. Copy the image again when you are online.", ShowWindow);
         }
     }
 
@@ -424,7 +471,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         if (Settings.Popups)
             Popup("Image from " + (Settings.Peer == "" ? "your phone" : Settings.Peer),
                 path == "" ? "In your clipboard. Press Ctrl+V to paste." : "In your clipboard and in Pictures\\Ferry. Click to open it.",
-                ToolTipIcon.None, () => Open(path));
+                () => Open(path));
     }
 
     /// <summary>Puts a saved image back on the clipboard without sending it to the phone.</summary>
@@ -458,7 +505,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         var info = new FileInfo(path);
         if (!info.Exists)
         {
-            Popup("File not sent", $"{name} is a folder, or it is gone. Ferry sends files only.", ToolTipIcon.Warning, ShowWindow);
+            Popup("File not sent", $"{name} is a folder, or it is gone. Ferry sends files only.", ShowWindow);
             return;
         }
         bool over = false;   // a progress report can arrive after the send ends; it must not bring the bar back
@@ -482,7 +529,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
             {
                 if (info.Length > Sync.MaxFileBytes)
                 {
-                    Popup("File not sent", $"{name} did not reach the phone: the Wi-Fi connection broke off. Send it again.", ToolTipIcon.Warning, ShowWindow);
+                    Popup("File not sent", $"{name} did not reach the phone: the Wi-Fi connection broke off. Send it again.", ShowWindow);
                     return;
                 }
                 direct = false;
@@ -491,7 +538,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
             {
                 if (info.Length > Sync.MaxFileBytes)
                 {
-                    Popup("File not sent", $"{name} is over 90 MB. Ferry sends files that large only when the laptop and the phone are on the same Wi-Fi.", ToolTipIcon.Warning, ShowWindow);
+                    Popup("File not sent", $"{name} is over 90 MB. Ferry sends files that large only when the laptop and the phone are on the same Wi-Fi.", ShowWindow);
                     return;
                 }
                 await Sync.SendFile(Settings.Code, path, progress);
@@ -499,19 +546,19 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
             over = true;
             Transfer = null;
             Crossed("Laptop → Phone", name, DateTime.Now, filePath: path);
-            if (Settings.Popups) Popup("Sent to " + (Settings.Peer == "" ? "your phone" : Settings.Peer), name + "\nIn Downloads/Ferry on the phone.", ToolTipIcon.None, ShowWindow);
+            if (Settings.Popups) Popup("Sent to " + (Settings.Peer == "" ? "your phone" : Settings.Peer), name + "\nIn Downloads/Ferry on the phone.", ShowWindow);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Popup("File not sent", $"Ferry could not read {name}. Another program can be using it.", ToolTipIcon.Warning, ShowWindow);
+            Popup("File not sent", $"Ferry could not read {name}. Another program can be using it.", ShowWindow);
         }
         catch (HttpRequestException e) when (e.StatusCode is HttpStatusCode.RequestEntityTooLarge or HttpStatusCode.TooManyRequests)
         {
-            Popup("File not sent", "ntfy.sh refused the file. It keeps at most 100 MB of your files at a time, for 3 hours. Try again later.", ToolTipIcon.Warning, ShowWindow);
+            Popup("File not sent", "ntfy.sh refused the file. It keeps at most 100 MB of your files at a time, for 3 hours. Try again later.", ShowWindow);
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
-            Popup("File not sent", "Ferry could not reach ntfy.sh. Send the file again when you are online.", ToolTipIcon.Warning, ShowWindow);
+            Popup("File not sent", "Ferry could not reach ntfy.sh. Send the file again when you are online.", ShowWindow);
         }
         finally
         {
@@ -636,13 +683,13 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     {
         if (Settings.Paused) return;
         string heading = app == "" ? title : title == "" ? app : app + " · " + title;
-        Popup(heading == "" ? "Phone notification" : heading, text == "" ? " " : Preview(text), ToolTipIcon.None, () => { });
+        Popup(heading == "" ? "Phone notification" : heading, text == "" ? " " : Preview(text), () => { });
     }
 
     void FileComing(string name, long bytes, DateTime at)
     {
         if (Settings.Popups && !Settings.Paused && DateTime.Now - at < TimeSpan.FromMinutes(10))
-            Popup("Coming from " + (Settings.Peer == "" ? "your phone" : Settings.Peer), (bytes < 0 ? name : $"{name}, {bytes / 1048576.0:0.0} MB") + "\nFerry saves it in Downloads\\Ferry.", ToolTipIcon.None, ShowWindow);
+            Popup("Coming from " + (Settings.Peer == "" ? "your phone" : Settings.Peer), (bytes < 0 ? name : $"{name}, {bytes / 1048576.0:0.0} MB") + "\nFerry saves it in Downloads\\Ferry.", ShowWindow);
     }
 
     /// <summary>A file from the phone, in a temporary file that this moves to Downloads\Ferry.</summary>
@@ -656,13 +703,13 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             try { File.Delete(temp); } catch (IOException) { }
-            Popup("File not saved", $"Ferry could not save {name} in Downloads\\Ferry.", ToolTipIcon.Warning, ShowWindow);
+            Popup("File not saved", $"Ferry could not save {name} in Downloads\\Ferry.", ShowWindow);
             return;
         }
         Crossed("Phone → Laptop", Path.GetFileName(path), at, filePath: path);
         if (Settings.Popups && !Settings.Paused && DateTime.Now - at < TimeSpan.FromMinutes(10))
             Popup("File from " + (Settings.Peer == "" ? "your phone" : Settings.Peer), Path.GetFileName(path) + "\nIn Downloads\\Ferry. Click to show it.",
-                ToolTipIcon.None, () => ShowInFolder(path));
+                () => ShowInFolder(path));
     }
 
     /// <summary>Saves a file from the phone in Downloads\Ferry. It never overwrites: a second "a.pdf" becomes "a (2).pdf".</summary>
@@ -725,7 +772,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         Settings.Peer = name.Length == 0 ? "your phone" : name[..Math.Min(name.Length, 40)];
         Settings.Save();
         window?.ShowLogbook();
-        Popup("Phone paired", $"{Settings.Peer} is now linked to this laptop. Your text is encrypted.", ToolTipIcon.Info, ShowWindow);
+        Popup("Phone paired", $"{Settings.Peer} is now linked to this laptop. Your text is encrypted.", ShowWindow);
         Changed();
     }
 
@@ -753,7 +800,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     {
         string who = Settings.Peer == "" ? "Your phone" : Settings.Peer;
         NewPairing();
-        Popup("Phone unpaired", $"{who} unpaired Ferry. To pair again, scan the new code with the phone.", ToolTipIcon.Info, ShowWindow);
+        Popup("Phone unpaired", $"{who} unpaired Ferry. To pair again, scan the new code with the phone.", ShowWindow);
     }
 
     void NewPairing()
@@ -800,7 +847,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         update = found;
         updateItem.Text = $"Update to Ferry {found.Value.Version}";
         updateItem.Visible = true;
-        Popup($"Ferry {found.Value.Version} is ready", "Click to update. Ferry restarts by itself; your pairing stays.", ToolTipIcon.Info, InstallUpdate);
+        Popup($"Ferry {found.Value.Version} is ready", "Click to update. Ferry restarts by itself; your pairing stays.", InstallUpdate);
     }
 
     public async void InstallUpdate()
@@ -817,7 +864,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         {
             updateItem.Enabled = true;
             updateItem.Text = $"Update to Ferry {u.Version}";
-            Popup("Update failed", "Ferry could not download or install the update. It keeps working; try again later from the tray menu.", ToolTipIcon.Warning, () => { });
+            Popup("Update failed", "Ferry could not download or install the update. It keeps working; try again later from the tray menu.", () => { });
         }
     }
 
