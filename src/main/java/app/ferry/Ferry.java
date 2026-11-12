@@ -253,13 +253,22 @@ final class Ferry {
      * or "accept" (the laptop sends; ips empty when this phone is not on Wi-Fi). size is -1 when unknown.
      */
     static void postLan(Context c, String type, String id, String name, long size, int port, java.util.List<String> ips) throws IOException {
-        String code = code(c);
-        if (code.isEmpty()) throw new IOException("Not paired");
         try {
             JSONObject m = new JSONObject().put("t", type).put("id", id).put("port", port).put("ips", new JSONArray(ips));
             if (name != null) m.put("name", name).put("size", size);
+            postLan(c, m);
+        } catch (JSONException e) {
+            throw new IOException(e);
+        }
+    }
+
+    /** Any message that sets up a direct Wi-Fi connection, for example "session" (see Session.java). */
+    static void postLan(Context c, JSONObject m) throws IOException {
+        String code = code(c);
+        if (code.isEmpty()) throw new IOException("Not paired");
+        try {
             post(code, Crypto.sealLan(code, m.toString()), "phone,lan");
-        } catch (JSONException | GeneralSecurityException e) {
+        } catch (GeneralSecurityException e) {
             throw new IOException(e);
         }
     }

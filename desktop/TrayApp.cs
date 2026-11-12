@@ -28,6 +28,9 @@ sealed class TrayApp : ApplicationContext
     readonly ToolStripMenuItem popupsItem = new("Show pop-ups") { CheckOnClick = true };
     readonly ToolStripMenuItem imagesItem = new("Send and receive images") { CheckOnClick = true };
     readonly ToolStripMenuItem autostartItem = new("Start with Windows") { CheckOnClick = true };
+    readonly ToolStripMenuItem helmItem = new("Let the phone control this laptop") { CheckOnClick = true };
+    readonly ToolStripMenuItem endHelmItem = new("End Helm session") { Visible = false };
+    Session? helm;   // the phone's Helm session while it is open
     readonly System.Windows.Forms.Timer updateTimer = new() { Interval = 12 * 60 * 60 * 1000 };
     MainWindow? window;
     string? last;   // text we last sent or applied, so our own clipboard changes do not echo back
@@ -72,10 +75,14 @@ sealed class TrayApp : ApplicationContext
         imagesItem.CheckedChanged += (_, _) => Images = imagesItem.Checked;
         autostartItem.Checked = StartWithWindows;
         autostartItem.CheckedChanged += (_, _) => StartWithWindows = autostartItem.Checked;
+        helmItem.Checked = Settings.Helm == true;
+        helmItem.CheckedChanged += (_, _) => HelmOn = helmItem.Checked;
+        endHelmItem.Click += (_, _) => helm?.Dispose();
         updateItem.Click += (_, _) => InstallUpdate();
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(statusItem);
+        menu.Items.Add(endHelmItem);
         menu.Items.Add(new ToolStripMenuItem("Open Ferry", null, (_, _) => ShowWindow()) { Font = new Font(menu.Font, FontStyle.Bold) });
         menu.Items.Add("Send a file to the phone…", null, (_, _) => PickFiles());
         menu.Items.Add(updateItem);
@@ -84,6 +91,7 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(popupsItem);
         menu.Items.Add(imagesItem);
         menu.Items.Add(autostartItem);
+        menu.Items.Add(helmItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit Ferry", null, (_, _) => Quit());
         tray.ContextMenuStrip = menu;
@@ -95,6 +103,7 @@ sealed class TrayApp : ApplicationContext
         sync.FileReceived += (name, path, at) => ui.Post(_ => ApplyFile(name, path, at), null);
         sync.FileComing += (name, bytes, at) => ui.Post(_ => FileComing(name, bytes, at), null);
         sync.FileOffered += (offer, at) => ui.Post(_ => ReceiveDirect(offer, at), null);
+        sync.SessionOffered += offer => ui.Post(_ => SessionOffered(offer), null);
         sync.NotificationReceived += (app, title, text) => ui.Post(_ => PhoneNotification(app, title, text), null);
         sync.PhonePaired += name => ui.Post(_ => Paired(name), null);
         sync.PhoneUnpaired += () => ui.Post(_ => PhoneUnpaired(), null);
@@ -166,6 +175,21 @@ sealed class TrayApp : ApplicationContext
             Settings.Images = value;
             Settings.Save();
             imagesItem.Checked = value;
+            Changed();
+        }
+    }
+
+    /// <summary>May the phone control this laptop (Helm)? Turning it off ends an open session at once.</summary>
+    public bool HelmOn
+    {
+        get => Settings.Helm == true;
+        set
+        {
+            if (Settings.Helm == value) return;
+            Settings.Helm = value;
+            Settings.Save();
+            helmItem.Checked = value;
+            if (!value) helm?.Dispose();
             Changed();
         }
     }
@@ -254,13 +278,18 @@ sealed class TrayApp : ApplicationContext
         return p.Length > 120 ? p[..120] + "…" : p;
     }
 
+    string PhoneName => Settings.Peer == "" ? "Your phone" : Settings.Peer;
+
     void Changed()
     {
-        statusItem.Text = "Ferry · " + StatusLabel;
-        string tip = "Ferry · " + StatusLabel + (LastCrossing is { } c ? $"\nLast: {c.Direction}, {c.Time:t}" : "");
+        // While the phone has the helm, the tray says so and its lamp turns to the course color.
+        string helmNote = helm is null ? "" : $"\n{PhoneName} has the helm";
+        statusItem.Text = "Ferry · " + StatusLabel + (helm is null ? "" : " · Helm open");
+        endHelmItem.Visible = helm is not null;
+        string tip = "Ferry · " + StatusLabel + helmNote + (LastCrossing is { } c ? $"\nLast: {c.Direction}, {c.Time:t}" : "");
         tray.Text = tip.Length > 127 ? tip[..127] : tip;
         var old = tray.Icon;
-        tray.Icon = Chart.AppIcon(SystemInformation.SmallIconSize.Width, LampColor);
+        tray.Icon = Chart.AppIcon(SystemInformation.SmallIconSize.Width, helm is null ? LampColor : Chart.Course);
         old?.Dispose();
         window?.Render();
     }
@@ -615,14 +644,81 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
             }
         }
         try { if (temp != "") File.Delete(temp); } catch (IOException) { }
+        await NoLan(offer);
+    }
+
+    /// <summary>Tells the phone that the laptop will not connect, so it stops waiting at once.</summary>
+    async Task NoLan(JsonElement offer)
+    {
         try
         {
-            await Sync.PostLan(Settings.Code, new { t = "nolan", id = offer.GetProperty("id").GetString() });
+            await Sync.PostLan(Settings.Code, new { t = "nolan", id = offer.TryGetProperty("id", out var id) ? id.GetString() : "" });
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
-            // Offline: the phone stops waiting by itself after 10 seconds.
+            // Offline: the phone stops waiting by itself.
         }
+    }
+
+    /// <summary>
+    /// The phone opened Helm and listens for the laptop. The first time, the laptop asks before the phone may control it,
+    /// and keeps the answer (Settings, or the tray menu, changes it later).
+    /// </summary>
+    void SessionOffered(JsonElement offer)
+    {
+        if (!offer.TryGetProperty("for", out var what) || what.GetString() != "helm")
+        {
+            _ = NoLan(offer);
+            return;
+        }
+        if (Settings.Helm is null)
+        {
+            // Top-most, without a window of Ferry: the person at the laptop must answer it.
+            var answer = MessageBox.Show(
+                $"{PhoneName} wants to control this laptop with Helm. It can move the pointer, click, type, and lock this laptop or put it to sleep.\n\nAllow it? You can change this later in Ferry Settings.",
+                "Ferry · Helm", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2, MessageBoxOptions.DefaultDesktopOnly);
+            HelmOn = answer == DialogResult.Yes;
+        }
+        if (!HelmOn)
+        {
+            _ = NoLan(offer);
+            return;
+        }
+        _ = RunHelm(offer);
+    }
+
+    async Task RunHelm(JsonElement offer)
+    {
+        Session? session = null;
+        try
+        {
+            session = await Session.Join(Settings.Code, offer);
+        }
+        catch (Exception e) when (e is IOException or SocketException)
+        {
+        }
+        if (session is null)
+        {
+            await NoLan(offer);
+            return;
+        }
+        helm?.Dispose();   // one phone, one helm: a new session replaces the old one
+        helm = session;
+        Changed();
+        Popup($"{PhoneName} has the helm", "Your phone controls the pointer and the keyboard of this laptop. Click here to end it.", session.Dispose);
+        // On a thread-pool thread, so input never waits for the window.
+        await Task.Run(() => session.Run((kind, body) =>
+        {
+            if (kind != Helm.Sleep)
+            {
+                Helm.Handle(kind, body);
+                return;
+            }
+            session.Dispose();   // the phone sees the end at once, not after 15 s
+            ui.Post(_ => Application.SetSuspendState(PowerState.Suspend, false, false), null);
+        }));
+        if (helm == session) helm = null;
+        Changed();
     }
 
     void ShowTransfer()
@@ -884,6 +980,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         sync.Stop();
+        helm?.Dispose();
         watcher.Dispose();
         window?.Dispose();
         ExitThread();

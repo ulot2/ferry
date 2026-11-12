@@ -91,7 +91,7 @@ The pill in the top-right corner of the chart shows the connection:
 - **Adrift** (red dot): offline. Ferry tries again every 5 seconds. When the device changes network or wakes from sleep, Ferry connects again at once.
 - **Connecting**, **Paused** or **Not paired** (grey dot).
 
-The main screen shows only the chart, the last crossing and the logbook. On the phone it also shows **Send clipboard**, and on the laptop **Send a file…**. When something needs action, one notice shows under it, for example an update or background use.
+The main screen shows only the chart, the last crossing and the logbook. On the phone it also shows **Send clipboard** and **Helm** (see [Helm](#helm-the-phone-as-a-remote)), and on the laptop **Send a file…**. When something needs action, one notice shows under it, for example an update or background use.
 
 Everything that you set once is in **Settings**. To open it, click or tap the round button with three sliders, right of the pill. In the Settings of each app:
 
@@ -207,6 +207,45 @@ Limits for files through ntfy.sh:
 - If Ferry restarts while a large file arrives, the other device does not get that file. Send it again.
 - A phone or laptop with an older Ferry gets files up to 14 MB only, and never directly. Update both apps.
 
+## Helm: the phone as a remote
+
+Helm makes the phone a trackpad, a keyboard and a slide clicker for the laptop. Helm works only when both devices are on the same Wi-Fi. It also needs the internet for about one second to start.
+
+### Start Helm
+
+1. On the phone, tap **Helm: use this phone as a remote** on the main screen. You can also add the **Helm** tile to the quick settings panel.
+2. The first time, the laptop asks if the phone can control it. Click **Yes** on the laptop.
+
+The laptop keeps your answer. To change it, use **Let the phone control this laptop** in Settings in the Ferry window, or in the tray menu.
+
+While the phone has the helm, the Ferry icon in the tray turns magenta and a pop-up says so. To end Helm from the laptop, click the pop-up, or click **End Helm session** in the tray menu. Helm also ends when you leave the Helm screen on the phone.
+
+### Use Helm
+
+| To do this | Do this on the phone |
+|---|---|
+| Move the pointer | Move one finger on the trackpad. |
+| Click | Tap. |
+| Right-click | Tap with two fingers. |
+| Scroll | Move two fingers. |
+| Drag | Tap, then touch again at once and hold. Move the finger, then lift it. |
+| Type | Tap **Type here to type on the laptop**, then type. The text goes to the window that is active on the laptop. |
+| Press Esc, Tab, Backspace, Enter or an arrow key | Tap the key under the trackpad. |
+| Play, pause, skip a track, change the volume | Tap the media keys, or press the volume buttons of the phone. |
+| Change slides | Tap **Slide clicker** at the top. Then tap **Next slide** or **Previous slide**, or press the volume buttons: up for the next slide, down for the previous one. |
+| Lock the laptop | Tap **Lock**. |
+| Put the laptop to sleep | Tap **Sleep**, then tap **Sleep** again. |
+
+If the pointer moves too slowly or too fast, change **Pointer speed** under the media keys.
+
+### Limits of Helm
+
+- Windows does not let Helm control a program that runs as administrator, a "Do you want to allow this app" prompt, or the lock screen. After **Lock**, unlock the laptop on the laptop itself.
+- After **Sleep**, the phone cannot wake the laptop.
+- Helm presses only the keys on the Helm screen. It cannot press the Windows key or shortcuts such as Ctrl+C.
+- Some public and guest Wi-Fi networks stop devices from connecting to each other. Helm does not work on such a network.
+- A laptop or phone with an older Ferry does not answer Helm. Update both apps.
+
 ## Updates
 
 Both apps look for a newer release on GitHub:
@@ -220,8 +259,9 @@ Your pairing and history stay after an update.
 
 - Text is encrypted end to end. ntfy.sh stores encrypted copies for up to 12 hours, so a device that was offline can catch up. ntfy.sh cannot read them.
 - ntfy.sh can see when a message is sent, how large it is, and which device type sent it.
-- A direct file crosses your own Wi-Fi, encrypted. Another device on the network can see that a transfer occurs, but it cannot read the file. The phone accepts a connection only from a device that has your pairing code.
+- A direct file crosses your own Wi-Fi, encrypted. Another device on the network can see that a transfer occurs, but it cannot read the file. The phone accepts a connection only from a device that has your pairing code. The laptop connects only to a private address on a network that the laptop is on, never to the internet.
 - The pairing code is the only secret. A person who has the code can read your clipboard text and send text to it. Do not share the code or the QR code.
+- Helm gives more control. After you allow Helm on the laptop, a person who has the pairing code and is on the same Wi-Fi can control the laptop. The tray icon turns magenta and a pop-up shows while a phone has the helm. Each Helm message is encrypted with your key and numbered, so a recorded message cannot be sent again.
 - If the code leaks, click **Reset pairing** in Settings in the laptop window. Then scan the new code with the phone.
 - When you unpair on one device, the other device unpairs too: **Reset pairing** on the laptop, or **Unpair** in Settings on the phone. The device that unpairs must be online to tell the other one. After an unpair, the laptop shows a new code to scan.
 - On the laptop, Ferry does not send copies that apps mark as private or as "do not share to other devices" (password managers do this).
@@ -294,6 +334,8 @@ The Android build needs JDK 21, the Android SDK, and Gradle 8.14. Copy the key t
 | `desktop/` | Windows tray app (C#, Windows Forms) |
 | `tools/install-ferry-auto.ps1` | Installs Ferry Auto from a Windows computer |
 | `src/main/java/app/ferry/Crypto.java`, `desktop/Crypto.cs` | The encryption. Both files must stay identical in behavior. |
+| `src/main/java/app/ferry/Session.java`, `desktop/Session.cs` | The session link: one encrypted connection that stays open on the same Wi-Fi, for Helm |
+| `src/main/java/app/ferry/HelmActivity.java`, `desktop/Helm.cs` | Helm: the remote screen on the phone, and the input on the laptop. Both files must use the same message kinds. |
 | `PRODUCT.md` | Who Ferry is for and what it must do |
 | `DESIGN.md` | The Nautical chart design: colors for light and dark mode, type, and the chart |
 | `desktop/ferry.ico` | The Windows icon (taskbar, Start menu, notification pop-ups) |

@@ -28,6 +28,7 @@ final class Crypto {
     private static final byte[] AAD_LAN = "ferry1-lan".getBytes(StandardCharsets.UTF_8);
     private static final byte[] AAD_HELLO = "ferry1-hello".getBytes(StandardCharsets.UTF_8);
     private static final byte[] AAD_NOTIFICATION = "ferry1-notification".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] AAD_SESSION = "ferry1-session".getBytes(StandardCharsets.UTF_8);
     private static final SecureRandom RNG = new SecureRandom();
 
     /** Lowercases and drops spaces and dashes, so a typed code works however it was grouped. */
@@ -113,6 +114,27 @@ final class Crypto {
         System.arraycopy(id, 0, aad, AAD_LAN.length, 16);
         for (int i = 0; i < 8; i++) aad[AAD_LAN.length + 16 + i] = (byte) (index >> (56 - 8 * i));
         aad[aad.length - 1] = (byte) (last ? 1 : 0);
+        return aad;
+    }
+
+    /**
+     * One frame of a session (Session.java). The AAD holds the session id, the direction (0 phone to laptop, 1 laptop to phone)
+     * and the frame number, so a frame cannot be repeated, reordered, or sent back to the device that sealed it.
+     */
+    static byte[] sealSession(String code, byte[] id, byte direction, long index, byte[] plain) throws GeneralSecurityException {
+        return sealRaw(code, plain, sessionAad(id, direction, index));
+    }
+
+    static byte[] openSession(String code, byte[] id, byte direction, long index, byte[] sealed) {
+        return openRaw(code, sealed, sessionAad(id, direction, index));
+    }
+
+    /** "ferry1-session" | 16-byte id | direction | 8-byte big-endian frame number */
+    private static byte[] sessionAad(byte[] id, byte direction, long index) {
+        byte[] aad = java.util.Arrays.copyOf(AAD_SESSION, AAD_SESSION.length + 16 + 1 + 8);
+        System.arraycopy(id, 0, aad, AAD_SESSION.length, 16);
+        aad[AAD_SESSION.length + 16] = direction;
+        for (int i = 0; i < 8; i++) aad[AAD_SESSION.length + 17 + i] = (byte) (index >> (56 - 8 * i));
         return aad;
     }
 

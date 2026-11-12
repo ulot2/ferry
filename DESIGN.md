@@ -61,6 +61,7 @@ paired device) and the course time. Status sits on the chart as a pill (dot + "S
 - Settings screen: a page of its own (no chart band), title "Settings" in sentence case, section names in the kicker style (APPEARANCE, SYNCING, PAIRING, KEEP FERRY RUNNING on the phone, ABOUT). The laptop closes it with Done (or Escape), the phone with ← Back.
 - Segmented control (the theme: System, Light, Dark): one outlined pill around all choices; the chosen one is filled with Chip on. Used only for one-of-several choices, never for on/off. A hint under it says what System gives now.
 - Switch rows (on/off settings, both apps): label (Medium) and a one-line hint (ink muted) on the left, a switch on the right: course-colored track with a white knob when on, an outlined track when off. The whole row toggles. Labels say what is on ("Pause syncing", "Show pop-ups").
+- Helm screen (phone): a page of its own like Settings, with ← Back, the title "Helm", and the link state (lamp dot and label) top right. A segmented control picks Trackpad or Slide clicker. The trackpad is a field of chart water with the section rule around it (16dp corners) and an italic hint in the middle. Keys are outlined buttons that share a row (`Ferry.Key`). In clicker mode, Next slide is the one primary button. The screen stays on while Helm is open.
 - Danger button (Reset pairing, Unpair): outlined in the adrift color with adrift text, on its own line, always behind a confirmation.
 
 ## Layout

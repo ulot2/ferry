@@ -17,6 +17,7 @@ sealed class Settings
     public bool Popups { get; set; } = true;
     public bool Images { get; set; } = true;
     public string Theme { get; set; } = "system";   // "system" (follow Windows), "light" or "dark"
+    public bool? Helm { get; set; }   // may the phone control this laptop? null: ask the first time it tries
     public string LastId { get; set; } = "";   // last ntfy.sh message seen, so a restart catches up on what it missed
     public List<Crossing> History { get; set; } = [];   // newest first
 

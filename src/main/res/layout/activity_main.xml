@@ -121,6 +121,13 @@ FORM: Owner-chosen "Nautical chart" from the four-direction canvas (Departure bo
                 android:layout_marginTop="18dp"
                 android:text="Send clipboard to laptop" />
 
+            <Button
+                android:id="@+id/helm"
+                style="@style/Ferry.Button.Secondary"
+                android:layout_width="match_parent"
+                android:layout_marginTop="10dp"
+                android:text="Helm: use this phone as a remote" />
+
             <!-- Notices: at most one at a time, the most urgent (see MainActivity.render). The rest lives in Settings. -->
             <LinearLayout
                 android:id="@+id/updateCard"

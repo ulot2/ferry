@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -131,7 +132,7 @@ static class Lan
         if (await net.ReadAsync(ok, stall.Token) != 1 || ok[0] != 1) throw new IOException("The phone did not confirm the file.");
     }
 
-    static async Task Hello(NetworkStream net, string code, byte[] id)
+    public static async Task Hello(NetworkStream net, string code, byte[] id)
     {
         byte[] hello = Crypto.SealHello(code, id);
         byte[] message = new byte[4 + hello.Length];
@@ -141,11 +142,11 @@ static class Lan
     }
 
     /// <summary>Tries every address of the phone at once and keeps the first that answers. Null when none does in 3 s.</summary>
-    static async Task<Socket?> Connect(JsonElement where)
+    public static async Task<Socket?> Connect(JsonElement where)
     {
         int port = where.TryGetProperty("port", out var p) ? p.GetInt32() : 0;
         var ips = where.TryGetProperty("ips", out var list)
-            ? list.EnumerateArray().Select(x => IPAddress.TryParse(x.GetString(), out var a) ? a : null).OfType<IPAddress>().Where(a => a.AddressFamily == AddressFamily.InterNetwork).ToList()
+            ? OnOurNetworks(list.EnumerateArray().Select(x => IPAddress.TryParse(x.GetString(), out var a) ? a : null).OfType<IPAddress>())
             : new List<IPAddress>();
         if (ips.Count == 0 || port is <= 0 or > 65535) return null;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
@@ -178,4 +179,26 @@ static class Lan
         }
         return won;
     }
+
+    /// <summary>
+    /// Keeps only private IPv4 addresses on a subnet of a network that this laptop is on, and never the laptop itself.
+    /// The addresses come in a message sealed with the pairing code, so a leaked code must not make the laptop
+    /// connect to the internet or to other networks.
+    /// </summary>
+    static List<IPAddress> OnOurNetworks(IEnumerable<IPAddress> ips)
+    {
+        var ours = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+            .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+            .Where(u => u.Address.AddressFamily == AddressFamily.InterNetwork && u.PrefixLength is >= 8 and < 32)
+            .Select(u => (Own: Number(u.Address), Mask: uint.MaxValue << (32 - u.PrefixLength)))
+            .ToList();
+        return ips.Where(ip => ip.AddressFamily == AddressFamily.InterNetwork && IsPrivate(ip)
+            && ours.Any(n => Number(ip) != n.Own && (Number(ip) & n.Mask) == (n.Own & n.Mask))).ToList();
+    }
+
+    /// <summary>10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16: the ranges that Lan.java offers (isSiteLocalAddress).</summary>
+    static bool IsPrivate(IPAddress ip) => ip.GetAddressBytes() is [10, _, _, _] or [172, >= 16 and <= 31, _, _] or [192, 168, _, _];
+
+    static uint Number(IPAddress ip) => BinaryPrimitives.ReadUInt32BigEndian(ip.GetAddressBytes());
 }

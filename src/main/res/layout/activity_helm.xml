@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Helm: the phone as a remote for the laptop. A page of its own like Settings (no chart band), with the link state at the top.
+Trackpad mode: the pad, two rows of keys, a field that types on the laptop, the media keys and the pointer speed.
+Clicker mode: one large Next slide and a smaller Previous slide. Lock and Sleep in both. See DESIGN.md.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:keepScreenOn="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/back"
+                style="@style/Ferry.Button.Text"
+                android:layout_width="wrap_content"
+                android:layout_marginStart="-10dp"
+                android:contentDescription="Back to the chart"
+                android:text="← Back" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <View
+                android:id="@+id/lamp"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/lamp" />
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:accessibilityLiveRegion="polite"
+                android:fontFamily="@font/barlow_medium"
+                android:textColor="@color/ink"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/Ferry.Title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:accessibilityHeading="true"
+            android:text="Helm"
+            android:textSize="26sp" />
+
+        <RadioGroup
+            android:id="@+id/modeGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_segment"
+            android:contentDescription="Mode"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/modePad"
+                style="@style/Ferry.Segment"
+                android:text="Trackpad" />
+
+            <RadioButton
+                android:id="@+id/modeClicker"
+                style="@style/Ferry.Segment"
+                android:text="Slide clicker" />
+        </RadioGroup>
+
+        <!-- Only while not connected: why, and how to try again. -->
+        <LinearLayout
+            android:id="@+id/notice"
+            style="@style/Ferry.Notice"
+            android:layout_marginTop="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/noticeBody"
+                style="@style/Ferry.Body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+
+            <Button
+                android:id="@+id/again"
+                style="@style/Ferry.Button.Secondary"
+                android:layout_width="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Connect again" />
+        </LinearLayout>
+
+        <!-- Trackpad mode -->
+        <LinearLayout
+            android:id="@+id/padMode"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_trackpad">
+
+                <TextView
+                    style="@style/Ferry.Label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:importantForAccessibility="no"
+                    android:padding="16dp"
+                    android:text="One finger moves the pointer. Tap to click.\nTwo fingers scroll. Tap with two to right-click.\nTap, then touch and hold to drag." />
+
+                <app.ferry.Trackpad
+                    android:id="@+id/pad"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="Trackpad. Move one finger to move the pointer of the laptop. Tap to click." />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/keyEsc" style="@style/Ferry.Key" android:text="Esc" />
+                <Button android:id="@+id/keyTab" style="@style/Ferry.Key" android:text="Tab" />
+                <Button android:id="@+id/keyBack" style="@style/Ferry.Key" android:contentDescription="Backspace" android:text="⌫" />
+                <Button android:id="@+id/keyEnter" style="@style/Ferry.Key" android:text="Enter" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/keyLeft" style="@style/Ferry.Key" android:contentDescription="Left arrow" android:text="←" />
+                <Button android:id="@+id/keyUp" style="@style/Ferry.Key" android:contentDescription="Up arrow" android:text="↑" />
+                <Button android:id="@+id/keyDown" style="@style/Ferry.Key" android:contentDescription="Down arrow" android:text="↓" />
+                <Button android:id="@+id/keyRight" style="@style/Ferry.Key" android:contentDescription="Right arrow" android:text="→" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/type"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_field"
+                android:fontFamily="@font/barlow_regular"
+                android:hint="Type here to type on the laptop"
+                android:imeOptions="actionSend|flagNoExtractUi"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:singleLine="true"
+                android:textColor="@color/ink"
+                android:textColorHint="@color/ink_muted"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/mediaPrev" style="@style/Ferry.Key" android:contentDescription="Previous track" android:text="Prev" />
+                <Button android:id="@+id/mediaPlay" style="@style/Ferry.Key" android:contentDescription="Play or pause" android:text="Play" />
+                <Button android:id="@+id/mediaNext" style="@style/Ferry.Key" android:contentDescription="Next track" android:text="Next" />
+                <Button android:id="@+id/volDown" style="@style/Ferry.Key" android:contentDescription="Volume down" android:text="Vol −" />
+                <Button android:id="@+id/volMute" style="@style/Ferry.Key" android:text="Mute" />
+                <Button android:id="@+id/volUp" style="@style/Ferry.Key" android:contentDescription="Volume up" android:text="Vol +" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Ferry.Hint"
+                    android:labelFor="@+id/speed"
+                    android:text="Pointer speed" />
+
+                <SeekBar
+                    android:id="@+id/speed"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:max="18" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Slide clicker mode -->
+        <LinearLayout
+            android:id="@+id/clickMode"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/slideNext"
+                style="@style/Ferry.Button.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="3"
+                android:text="Next slide" />
+
+            <Button
+                android:id="@+id/slidePrev"
+                style="@style/Ferry.Button.Secondary"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="12dp"
+                android:layout_weight="1"
+                android:text="Previous slide" />
+
+            <TextView
+                style="@style/Ferry.Hint"
+                android:layout_marginTop="8dp"
+                android:text="The volume buttons of the phone change the slide too: up for the next, down for the previous." />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <Button android:id="@+id/lock" style="@style/Ferry.Key" android:contentDescription="Lock the laptop" android:text="Lock" />
+            <Button android:id="@+id/sleep" style="@style/Ferry.Key" android:contentDescription="Put the laptop to sleep" android:text="Sleep" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

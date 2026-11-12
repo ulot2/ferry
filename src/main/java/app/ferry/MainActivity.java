@@ -104,6 +104,7 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
         boolean autoEdition = Ferry.autoEdition(this);
         settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         send.setOnClickListener(v -> startActivity(new Intent(this, SendActivity.class)));
+        findViewById(R.id.helm).setOnClickListener(v -> startActivity(new Intent(this, HelmActivity.class)));
         findViewById(R.id.scan).setOnClickListener(v -> scan());
         pairAlt.setOnClickListener(v -> {
             manualRow.setVisibility(manualRow.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
@@ -260,6 +261,7 @@ public class MainActivity extends Activity implements SharedPreferences.OnShared
 
         // One primary action per state: Send when paired, Scan when not. Pairing shows only until paired; after that it is in Settings.
         send.setVisibility(paired ? View.VISIBLE : View.GONE);
+        findViewById(R.id.helm).setVisibility(paired ? View.VISIBLE : View.GONE);
         pairCard.setVisibility(paired ? View.GONE : View.VISIBLE);
         if (!paired) {
             pairTitle.setText(p.contains("topic") ? "Pair again" : "Pair with your laptop");

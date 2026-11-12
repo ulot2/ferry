@@ -21,6 +21,7 @@ static class Crypto
     static readonly byte[] AadLan = Encoding.UTF8.GetBytes("ferry1-lan");
     static readonly byte[] AadHello = Encoding.UTF8.GetBytes("ferry1-hello");
     static readonly byte[] AadNotification = Encoding.UTF8.GetBytes("ferry1-notification");
+    static readonly byte[] AadSession = Encoding.UTF8.GetBytes("ferry1-session");
 
     public static string NewCode() => RandomNumberGenerator.GetString(Alphabet, 26);
 
@@ -72,7 +73,23 @@ static class Crypto
         return aad;
     }
 
-    static string Seal(string code, string text, byte[] aad) => Prefix + Convert.ToBase64String(SealRaw(code, Encoding.UTF8.GetBytes(text), aad));
+    /// <summary>
+    /// One frame of a session (Session.cs). The AAD holds the session id, the direction (0 phone to laptop, 1 laptop to phone)
+    /// and the frame number, so a frame cannot be repeated, reordered, or sent back to the device that sealed it.
+    /// </summary>
+    public static byte[] SealSession(string code, byte[] id, byte direction, long index, ReadOnlySpan<byte> plain) => SealRaw(code, plain, SessionAad(id, direction, index));
+
+    public static byte[]? OpenSession(string code, byte[] id, byte direction, long index, byte[] sealedBytes) => OpenRaw(code, sealedBytes, SessionAad(id, direction, index));
+
+    /// <summary>"ferry1-session" | 16-byte id | direction | 8-byte big-endian frame number</summary>
+    static byte[] SessionAad(byte[] id, byte direction, long index)
+    {
+        byte[] aad = [.. AadSession, .. id, direction, 0, 0, 0, 0, 0, 0, 0, 0];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt64BigEndian(aad.AsSpan(AadSession.Length + 17, 8), index);
+        return aad;
+    }
+
+    static string Seal(string code, string text, byte[] aad) =>Prefix + Convert.ToBase64String(SealRaw(code, Encoding.UTF8.GetBytes(text), aad));
 
     static string? Open(string code, string message, byte[] aad)
     {

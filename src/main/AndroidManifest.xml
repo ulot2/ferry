@@ -49,6 +49,14 @@
             android:exported="false"
             android:label="Settings" />
 
+        <!-- Helm: the phone as a remote for the laptop. It keeps its session when the phone turns, and shrinks above the keyboard. -->
+        <activity
+            android:name=".HelmActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:label="Helm"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+
         <!-- Invisible: reads the clipboard (or shared/selected text) and sends it to the laptop. -->
         <activity
             android:name=".SendActivity"
@@ -87,6 +95,17 @@
             android:exported="true"
             android:label="Send clipboard"
             android:icon="@drawable/ic_tile"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".HelmTile"
+            android:exported="true"
+            android:label="Helm"
+            android:icon="@drawable/ic_helm"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

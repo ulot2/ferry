@@ -20,6 +20,7 @@ sealed class Sync
     public event Action<string, string, DateTime>? FileReceived;   // name, and a temporary file that the handler moves
     public event Action<string, long, DateTime>? FileComing;   // name and size, before the file itself
     public event Action<JsonElement, DateTime>? FileOffered;   // the phone offers a file straight over Wi-Fi
+    public event Action<JsonElement>? SessionOffered;   // the phone listens for a session (Helm)
     public event Action<string, string, string>? NotificationReceived;   // app, title, text: a phone notification from Roost
     public event Action<string>? PhonePaired;
     public event Action? PhoneUnpaired;   // the phone tapped Unpair
@@ -147,6 +148,7 @@ sealed class Sync
                 {
                     case "accept": Lan.Answer(message); break;
                     case "offer": FileOffered?.Invoke(message, at); break;
+                    case "session": SessionOffered?.Invoke(message); break;
                 }
             }
             catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)

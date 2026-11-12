@@ -22,7 +22,7 @@ sealed class MainWindow : Form
     readonly TextBox code;
     readonly ListBox history;
     readonly PillButton settings, copy, done, sendFile, clear, settingsDone, themeSystem, themeLight, themeDark, showCode, reset, checkUpdate;
-    readonly SwitchRow pause, popups, images, autostart;
+    readonly SwitchRow pause, popups, images, autostart, helm;
     List<Crossing> earlier = [];
     List<object> rows = [];   // the logbook as shown: a string is a day heading (TODAY, YESTERDAY, EARLIER), a Crossing is an entry
     readonly Font wordmark = Chart.Font("Barlow Condensed SemiBold", 15f), pillFont = Chart.Font("Barlow Medium", 9.5f),
@@ -110,12 +110,14 @@ sealed class MainWindow : Form
         images.Click += (_, _) => app.Images = !app.Images;
         autostart = AddSwitch("Start with Windows", "Ferry starts in the tray when you sign in.", 334);
         autostart.Click += (_, _) => { app.StartWithWindows = !app.StartWithWindows; Render(); };
-        showCode = AddButton("Show pairing code", PillKind.Link, 12, 440, 160, 32);
+        helm = AddSwitch("Let the phone control this laptop", "Helm: the phone moves the pointer, types and locks.", 384);
+        helm.Click += (_, _) => app.HelmOn = !app.HelmOn;
+        showCode = AddButton("Show pairing code", PillKind.Link, 12, 490, 160, 32);
         showCode.Click += (_, _) => { pairingShown = true; Render(); };
         // Reset pairing unpairs the phone: an outlined adrift button on its own line, apart from the harmless link above.
-        reset = AddButton("Reset pairing", PillKind.Danger, 22, 480, 132, 34);
+        reset = AddButton("Reset pairing", PillKind.Danger, 22, 530, 132, 34);
         reset.Click += (_, _) => ConfirmReset();
-        checkUpdate = AddButton("Check for updates", PillKind.Link, 12, 572, 220, 32);
+        checkUpdate = AddButton("Check for updates", PillKind.Link, 12, 622, 220, 32);
         checkUpdate.Click += async (_, _) => await CheckUpdate();
 
         // Drop files anywhere on the window to send them to the phone.
@@ -329,10 +331,10 @@ sealed class MainWindow : Form
         done.Visible = view == View.Pairing && (st.Peer != "" || settingsShown);
         foreach (Control ctl in new Control[] { clear, sendFile })
             ctl.Visible = view == View.Logbook;
-        foreach (Control ctl in new Control[] { settingsDone, themeSystem, themeLight, themeDark, pause, popups, images, autostart, showCode, checkUpdate })
+        foreach (Control ctl in new Control[] { settingsDone, themeSystem, themeLight, themeDark, pause, popups, images, autostart, helm, showCode, checkUpdate })
             ctl.Visible = view == View.Settings;
         reset.Visible = view != View.Logbook;
-        reset.Location = view == View.Pairing ? new Point(S(276), S(516)) : new Point(S(22), S(480));
+        reset.Location = view == View.Pairing ? new Point(S(276), S(516)) : new Point(S(22), S(530));
         settings.Visible = view != View.Settings;   // Settings has its own Done link and no chart band
         if (IsHandleCreated) Chart.ChartTitleBar(Handle, view == View.Settings ? Chart.Ground : null);
 
@@ -344,6 +346,7 @@ sealed class MainWindow : Form
         popups.On = st.Popups;
         images.On = st.Images;
         autostart.On = app.StartWithWindows;
+        helm.On = app.HelmOn;
         if (app.Update is { } u && checkUpdate.Enabled) checkUpdate.Text = $"Update to Ferry {u.Version}";
 
         // The text under the chart shows the newest crossing; the logbook holds the ones before it.
@@ -357,7 +360,7 @@ sealed class MainWindow : Form
         history.Visible = view == View.Logbook && earlier.Count > 0;   // empty: the painted hint under the rule shows instead
         if (hint == "Copied.") hint = "";
 
-        ClientSize = new Size(S(420), S(view switch { View.Pairing => 560, View.Settings => 640, _ => 616 }));
+        ClientSize = new Size(S(420), S(view switch { View.Pairing => 560, View.Settings => 690, _ => 616 }));
         Invalidate();
     }
 
@@ -382,11 +385,11 @@ sealed class MainWindow : Form
             TextRenderer.DrawText(g, st.Theme == "system" ? $"Follows the light or dark mode of Windows. Now: {(Chart.Dark ? "dark" : "light")}."
                 : $"Always {st.Theme}, whatever Windows uses.", small, new Point((int)x, (int)(130 * s)), Chart.InkMuted);
             Chart.DrawTracked(g, "SYNCING", kicker, Chart.InkMuted, x, 166 * s, 1.2f * s);
-            Chart.DrawTracked(g, "PAIRING", kicker, Chart.InkMuted, x, 402 * s, 1.2f * s);
-            TextRenderer.DrawText(g, st.Peer == "" ? "Not paired yet." : $"Paired with {st.Peer}.", body, new Point((int)x, (int)(420 * s)), Chart.Ink);
-            Chart.DrawTracked(g, "ABOUT", kicker, Chart.InkMuted, x, 536 * s, 1.2f * s);
-            TextRenderer.DrawText(g, $"Ferry {Updater.Current}", body, new Point((int)x, (int)(554 * s)), Chart.Ink);
-            if (aboutHint != "") TextRenderer.DrawText(g, aboutHint, small, new Point((int)x, (int)(610 * s)), Chart.InkMuted);
+            Chart.DrawTracked(g, "PAIRING", kicker, Chart.InkMuted, x, 452 * s, 1.2f * s);
+            TextRenderer.DrawText(g, st.Peer == "" ? "Not paired yet." : $"Paired with {st.Peer}.", body, new Point((int)x, (int)(470 * s)), Chart.Ink);
+            Chart.DrawTracked(g, "ABOUT", kicker, Chart.InkMuted, x, 586 * s, 1.2f * s);
+            TextRenderer.DrawText(g, $"Ferry {Updater.Current}", body, new Point((int)x, (int)(604 * s)), Chart.Ink);
+            if (aboutHint != "") TextRenderer.DrawText(g, aboutHint, small, new Point((int)x, (int)(660 * s)), Chart.InkMuted);
             return;
         }
 

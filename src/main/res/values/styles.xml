@@ -129,6 +129,17 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- A key on the Helm screen: an outlined button that shares its row with the others. -->
+    <style name="Ferry.Key" parent="Ferry.Button.Secondary">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">3dp</item>
+        <item name="android:layout_marginEnd">3dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
+    </style>
+
     <style name="Ferry.Chip" parent="Ferry.Button">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_marginEnd">8dp</item>
