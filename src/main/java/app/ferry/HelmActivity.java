@@ -6,6 +6,9 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.KeyEvent;
@@ -22,12 +25,25 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Helm: the phone as a remote for the laptop, over a session on the same Wi-Fi (Session.java). The session opens
- * when this screen shows and ends when it goes away. desktop/Helm.cs must use the same message kinds and bodies.
+ * when this screen shows. It ends on Back, or one minute after another app comes in front.
+ * desktop/Helm.cs must use the same message kinds and bodies.
  */
 public class HelmActivity extends Activity {
     // Message kinds. Bodies: MOVE = dx, dy (2 bytes each, signed); BUTTON = 0 left or 1 right, then 1 down or 0 up;
     // SCROLL = vertical, horizontal (2 bytes each, signed, 120 = one wheel notch); TEXT = UTF-8; KEY = a Windows virtual-key code.
-    private static final byte MOVE = 1, BUTTON = 2, SCROLL = 3, TEXT = 4, KEY = 5, LOCK = 6, SLEEP = 7;
+    // ECHO = the phone's clock (8 bytes); the laptop sends it back as it came.
+    private static final byte MOVE = 1, BUTTON = 2, SCROLL = 3, TEXT = 4, KEY = 5, LOCK = 6, SLEEP = 7, ECHO = 8;
+    private static final int GRACE_MS = 60_000;   // how long the session stays open after another app comes in front
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable endLater = this::endSession;
+    /** Every 2 s while this screen shows: measures the time of the link, for the status at the top. */
+    private final Runnable echo = new Runnable() {
+        @Override
+        public void run() {
+            send(ECHO, ByteBuffer.allocate(8).putLong(SystemClock.uptimeMillis()).array());
+            main.postDelayed(this, 2_000);
+        }
+    };
     // Windows virtual-key codes. The laptop takes only these.
     private static final int VK_BACK = 0x08, VK_TAB = 0x09, VK_RETURN = 0x0D, VK_ESCAPE = 0x1B, VK_PRIOR = 0x21, VK_NEXT = 0x22,
             VK_LEFT = 0x25, VK_UP = 0x26, VK_RIGHT = 0x27, VK_DOWN = 0x28, VK_MUTE = 0xAD, VK_VOLUME_DOWN = 0xAE, VK_VOLUME_UP = 0xAF,
@@ -171,15 +187,35 @@ public class HelmActivity extends Activity {
     protected void onStart() {
         super.onStart();
         started = true;
-        connect();
+        main.removeCallbacks(endLater);
+        main.post(echo);
+        if (session != null && !session.isClosed()) show(true, null);   // back within the minute: the same session, no new start
+        else connect();
     }
 
-    /** The session ends when this screen goes away, so the laptop is never controlled from a phone in a pocket. */
+    /**
+     * Back ends the session at once. Another app, or the screen turning off, keeps it open for a minute, so a quick
+     * return needs no new start. The volume buttons go to the laptop only while this screen is in front.
+     */
     @Override
     protected void onStop() {
         super.onStop();
         started = false;
-        attempt++;
+        main.removeCallbacks(echo);
+        if (isFinishing()) endSession();
+        else main.postDelayed(endLater, GRACE_MS);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        main.removeCallbacks(endLater);
+        main.removeCallbacks(echo);
+        endSession();
+    }
+
+    private void endSession() {
+        attempt++;   // a start that is still on its way is closed when it comes
         Session s = session;
         session = null;
         if (s != null) s.close();
@@ -219,7 +255,14 @@ public class HelmActivity extends Activity {
                 clearField();
                 show(true, null);
                 new Thread(() -> {
-                    got.read(null);
+                    got.read((kind, body) -> {
+                        // The laptop sends an ECHO back as it came: the time since it left is the time of the link.
+                        if (kind != ECHO || body.length != 8) return;
+                        long ms = SystemClock.uptimeMillis() - ByteBuffer.wrap(body).getLong();
+                        runOnUiThread(() -> {
+                            if (session == got) statusText.setText("Steady link · " + ms + " ms");
+                        });
+                    });
                     runOnUiThread(() -> {
                         if (session != got) return;
                         session = null;

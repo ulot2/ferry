@@ -31,6 +31,7 @@ sealed class TrayApp : ApplicationContext
     readonly ToolStripMenuItem helmItem = new("Let the phone control this laptop") { CheckOnClick = true };
     readonly ToolStripMenuItem endHelmItem = new("End Helm session") { Visible = false };
     Session? helm;   // the phone's Helm session while it is open
+    DateTime helmEnded = DateTime.MinValue;   // when the last Helm session ended, so a quick return gets no second pop-up
     PhotosWindow? photosWindow;
     readonly System.Windows.Forms.Timer updateTimer = new() { Interval = 12 * 60 * 60 * 1000 };
     MainWindow? window;
@@ -704,22 +705,28 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
             await NoLan(offer);
             return;
         }
+        // A pop-up for a phone that takes the helm, but not again when it comes back within 5 minutes. The tray icon always shows it.
+        bool fresh = helm is null && DateTime.Now - helmEnded > TimeSpan.FromMinutes(5);
         helm?.Dispose();   // one phone, one helm: a new session replaces the old one
         helm = session;
         Changed();
-        Popup($"{PhoneName} has the helm", "Your phone controls the pointer and the keyboard of this laptop. Click here to end it.", session.Dispose);
+        if (fresh) Popup($"{PhoneName} has the helm", "Your phone controls the pointer and the keyboard of this laptop. Click here to end it.", session.Dispose);
         // On a thread-pool thread, so input never waits for the window.
         await Task.Run(() => session.Run((kind, body) =>
         {
-            if (kind != Helm.Sleep)
+            if (kind == Helm.Echo) session.Post(Helm.Echo, body);   // back as it came: the phone measures the link
+            else if (kind != Helm.Sleep) Helm.Handle(kind, body);
+            else
             {
-                Helm.Handle(kind, body);
-                return;
+                session.Dispose();   // the phone sees the end at once, not after 15 s
+                ui.Post(_ => Application.SetSuspendState(PowerState.Suspend, false, false), null);
             }
-            session.Dispose();   // the phone sees the end at once, not after 15 s
-            ui.Post(_ => Application.SetSuspendState(PowerState.Suspend, false, false), null);
         }));
-        if (helm == session) helm = null;
+        if (helm == session)
+        {
+            helm = null;
+            helmEnded = DateTime.Now;
+        }
         Changed();
     }
 

@@ -218,7 +218,11 @@ Helm makes the phone a trackpad, a keyboard and a slide clicker for the laptop. 
 
 The laptop keeps your answer. To change it, use **Let the phone control this laptop** in Settings in the Ferry window, or in the tray menu.
 
-While the phone has the helm, the Ferry icon in the tray turns magenta and a pop-up says so. To end Helm from the laptop, click the pop-up, or click **End Helm session** in the tray menu. Helm also ends when you leave the Helm screen on the phone.
+While the phone has the helm, the Ferry icon in the tray turns magenta. A pop-up also says so, but not again when the phone comes back within 5 minutes. To end Helm from the laptop, click the pop-up, or click **End Helm session** in the tray menu.
+
+To end Helm on the phone, tap **← Back** or the Back button. When you only switch to another app or the screen turns off, Helm stays open for one minute. If you come back in that minute, Helm works at once, without a new start.
+
+The top of the Helm screen shows the time that a message takes to the laptop and back, for example "Steady link · 6 ms". On a good Wi-Fi it is under 10 ms.
 
 ### Use Helm
 
@@ -236,7 +240,7 @@ While the phone has the helm, the Ferry icon in the tray turns magenta and a pop
 | Lock the laptop | Tap **Lock**. |
 | Put the laptop to sleep | Tap **Sleep**, then tap **Sleep** again. |
 
-If the pointer moves too slowly or too fast, change **Pointer speed** under the media keys.
+The pointer goes farther when your finger moves faster: move slowly for small, exact steps, and quickly to cross the screen. The Windows setting "Enhance pointer precision" does not change Helm. If the pointer moves too slowly or too fast, change **Pointer speed** under the media keys. The phone vibrates shortly for each click, and when a drag starts.
 
 ### Limits of Helm
 

@@ -3,6 +3,7 @@ package app.ferry;
 import android.content.Context;
 import android.os.SystemClock;
 import android.util.AttributeSet;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -23,13 +24,18 @@ public class Trackpad extends View {
     }
 
     private static final int TAP_MS = 250, DOUBLE_TAP_MS = 300;
+    /**
+     * The speed curve: a slow finger moves the pointer about 1 time the speed, for precise work; a fast one up to
+     * 4 times, to cross the screen. In dp per ms of finger speed. The laptop adds no acceleration of its own (Helm.cs).
+     */
+    private static final float BOOST = 1.5f, MAX_BOOST = 4f;
     /** Wheel units for one dp of finger travel: about 30 dp per notch. */
     private static final float WHEEL_PER_DP = 4f;
     private Sink sink;
     private float speed = 2f;
     private final float dp, slop;
     private float lastX, lastY, travel, restX, restY, restV, restH;
-    private long downAt, lastTapAt;
+    private long downAt, lastTapAt, lastMoveAt;
     private int fingers;
     private boolean dragging;
 
@@ -55,6 +61,7 @@ public class Trackpad extends View {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 downAt = now;
+                lastMoveAt = e.getEventTime();
                 fingers = 1;
                 travel = 0;
                 restX = restY = restV = restH = 0;
@@ -62,6 +69,7 @@ public class Trackpad extends View {
                 if (now - lastTapAt < DOUBLE_TAP_MS) {
                     dragging = true;
                     sink.button(0, true);
+                    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);   // the button is down: you feel the drag start
                 }
                 return true;
             case MotionEvent.ACTION_POINTER_DOWN:
@@ -75,11 +83,14 @@ public class Trackpad extends View {
                 float x = lastX, y = lastY;
                 center(e, -1);
                 float dx = (lastX - x) / dp, dy = (lastY - y) / dp;
+                long dt = Math.max(1, e.getEventTime() - lastMoveAt);
+                lastMoveAt = e.getEventTime();
                 travel += Math.abs(dx) + Math.abs(dy);
                 if (travel * dp < slop) return true;   // not a move yet: it can still be a tap
                 if (e.getPointerCount() == 1 && fingers == 1) {
-                    restX += dx * speed;
-                    restY += dy * speed;
+                    float gain = speed * Math.min(MAX_BOOST, 1 + BOOST * (float) Math.hypot(dx, dy) / dt);
+                    restX += dx * gain;
+                    restY += dy * gain;
                     int mx = (int) restX, my = (int) restY;
                     restX -= mx;
                     restY -= my;
@@ -103,6 +114,7 @@ public class Trackpad extends View {
                     int which = fingers >= 2 ? 1 : 0;
                     sink.button(which, true);
                     sink.button(which, false);
+                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);   // a short tick: the click went
                     if (which == 0) {
                         lastTapAt = now;
                         performClick();

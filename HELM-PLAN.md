@@ -30,6 +30,14 @@ Changes to phases 0 and 1 while we built them:
 - Helm sends only the keys on its screen. The laptop ignores all other keys, so a phone cannot press the Windows key or a shortcut.
 - The ping time is not in a log. We measure it on the real devices before phase 2.
 
+Changes to Helm after phase 1:
+
+- The session stays open for one minute after another app comes in front on the phone; Back ends it at once. A quick return needs no new start through ntfy.sh.
+- The laptop pop-up shows only for a new session, not when the phone comes back within 5 minutes. The magenta tray icon always shows an open session.
+- The phone sets the pointer speed curve (1 to 4 times, by finger speed). The laptop moves the pointer to an exact pixel, so the Windows pointer acceleration does not add to the curve.
+- The phone sends ECHO every 2 seconds; the laptop sends it back. The Helm screen shows the time of the link ("Steady link · 6 ms").
+- The phone vibrates for each click and when a drag starts.
+
 Changes to phase 2 while we built it:
 
 - The phone answers an "open" with a "session" message. When it says no, the message has a "why": "off" (the switch), "permission" (no Photos permission) or "nowifi". The laptop window shows what to do for each.

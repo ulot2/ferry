@@ -13,8 +13,9 @@ static class Helm
 {
     // Message kinds. Bodies: Move = dx, dy (2 bytes each, signed); Button = 0 left or 1 right, then 1 down or 0 up;
     // Scroll = vertical, horizontal (2 bytes each, signed, 120 = one wheel notch); Text = UTF-8; Key = a virtual-key code.
+    // Echo = the phone's clock (8 bytes), sent back as it came (TrayApp), so the phone can show the time of the link.
     const byte Move = 1, Button = 2, Scroll = 3, Text = 4, Key = 5, Lock = 6;
-    public const byte Sleep = 7;
+    public const byte Sleep = 7, Echo = 8;
 
     /// <summary>The keys that the Helm screen has. Others are ignored, so a phone cannot press the Windows key or a shortcut.</summary>
     static readonly HashSet<byte> AllowedKeys =
@@ -27,7 +28,8 @@ static class Helm
     ];
 
     const uint InputMouse = 0, InputKeyboard = 1;
-    const uint MouseMove = 0x0001, LeftDown = 0x0002, LeftUp = 0x0004, RightDown = 0x0008, RightUp = 0x0010, Wheel = 0x0800, HWheel = 0x1000;
+    const uint MouseMove = 0x0001, LeftDown = 0x0002, LeftUp = 0x0004, RightDown = 0x0008, RightUp = 0x0010, Wheel = 0x0800, HWheel = 0x1000,
+        VirtualDesk = 0x4000, Absolute = 0x8000;
     const uint KeyExtended = 0x0001, KeyUp = 0x0002, KeyUnicode = 0x0004;
 
     /// <summary>Does what one message says. Called on a thread-pool thread; SendInput works from any thread.</summary>
@@ -36,7 +38,7 @@ static class Helm
         switch (kind)
         {
             case Move when body.Length == 4:
-                Send(Mouse(MouseMove, I16(body, 0), I16(body, 2)));
+                MoveBy(I16(body, 0), I16(body, 2));
                 break;
             case Button when body.Length == 2:
                 bool down = body[1] == 1;
@@ -76,6 +78,20 @@ static class Helm
             inputs.Add(Keyboard(0, ch, KeyUnicode | KeyUp));
         }
         Send([.. inputs]);
+    }
+
+    /// <summary>
+    /// Moves the pointer by exactly dx, dy pixels, over all screens. The phone sets the speed curve; a relative move would
+    /// get the Windows pointer acceleration on top of it, so the move is to an absolute place.
+    /// </summary>
+    static void MoveBy(int dx, int dy)
+    {
+        if (!GetCursorPos(out var at)) return;
+        int left = GetSystemMetrics(76), top = GetSystemMetrics(77), width = GetSystemMetrics(78), height = GetSystemMetrics(79);   // the virtual screen
+        if (width <= 0 || height <= 0) return;
+        int x = Math.Clamp(at.X + dx, left, left + width - 1) - left, y = Math.Clamp(at.Y + dy, top, top + height - 1) - top;
+        // Windows maps 0 to 65535 onto the screen and rounds down, so round up here: the pointer lands on exactly this pixel.
+        Send(Mouse(MouseMove | Absolute | VirtualDesk, (int)(((long)x * 65536 + width - 1) / width), (int)(((long)y * 65536 + height - 1) / height)));
     }
 
     static short I16(byte[] b, int at) => BinaryPrimitives.ReadInt16BigEndian(b.AsSpan(at, 2));
@@ -131,4 +147,16 @@ static class Helm
 
     [DllImport("user32.dll")]
     static extern bool LockWorkStation();
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct POINT
+    {
+        public int X, Y;
+    }
+
+    [DllImport("user32.dll")]
+    static extern bool GetCursorPos(out POINT point);
+
+    [DllImport("user32.dll")]
+    static extern int GetSystemMetrics(int index);
 }
