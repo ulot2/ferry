@@ -149,6 +149,11 @@ final class Ferry {
         return imagesOn(c) && prefs(c).getBoolean("screenshots", false);
     }
 
+    /** Let the laptop see this phone's photos (off unless turned on; needs the Photos permission). */
+    static boolean photosOn(Context c) {
+        return prefs(c).getBoolean("photos", false);
+    }
+
     /** Adds a crossing to the top of the history (newest first, 10 kept). */
     static void crossed(Context c, String direction, String text, long at) {
         crossed(c, direction, text, at, null);

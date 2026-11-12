@@ -26,11 +26,11 @@ import java.util.Locale;
 public class SettingsActivity extends Activity implements SharedPreferences.OnSharedPreferenceChangeListener {
     private static final String HELP = "https://github.com/ulot2/ferry#readme";
     private static final String FERRY_AUTO_HELP = "https://github.com/ulot2/ferry#ferry-auto-automatic-sending";
-    private static final int PHOTOS = 1;
+    private static final int PHOTOS = 1, SHOW_PHOTOS = 2;   // permission requests: for screenshots, for Phone photos on the laptop
     private Button autoHelp, battery, update;
     private RadioGroup themeGroup;
-    private Switch autoSwitch, imagesSwitch, screenshotsSwitch;
-    private TextView themeHint, autoTitle, autoBody, screenshotsBody, pairTitle, pairBody, batteryBody, version, updateBody;
+    private Switch autoSwitch, imagesSwitch, screenshotsSwitch, photosSwitch;
+    private TextView themeHint, autoTitle, autoBody, screenshotsBody, photosBody, pairTitle, pairBody, batteryBody, version, updateBody;
     private View syncing, pairing, running, xiaomi;
     private boolean checking;
 
@@ -54,6 +54,8 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
         imagesSwitch = findViewById(R.id.imagesSwitch);
         screenshotsSwitch = findViewById(R.id.screenshotsSwitch);
         screenshotsBody = findViewById(R.id.screenshotsBody);
+        photosSwitch = findViewById(R.id.photosSwitch);
+        photosBody = findViewById(R.id.photosBody);
         pairTitle = findViewById(R.id.pairTitle);
         pairBody = findViewById(R.id.pairBody);
         batteryBody = findViewById(R.id.batteryBody);
@@ -88,12 +90,21 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
             if (on && !SyncService.canReadPhotos(this)) {
                 // Ask first; it turns on in onRequestPermissionsResult if allowed.
                 screenshotsSwitch.setChecked(false);
-                requestPermissions(new String[]{Build.VERSION.SDK_INT >= 33
-                        ? Manifest.permission.READ_MEDIA_IMAGES : Manifest.permission.READ_EXTERNAL_STORAGE}, PHOTOS);
+                requestPermissions(new String[]{photosPermission()}, PHOTOS);
                 return;
             }
             Ferry.prefs(this).edit().putBoolean("screenshots", on).apply();
             restartSync();
+        });
+        photosSwitch.setOnClickListener(v -> {
+            boolean on = photosSwitch.isChecked();
+            if (on && !SyncService.canReadPhotos(this)) {
+                photosSwitch.setChecked(false);   // turns on in onRequestPermissionsResult if allowed
+                requestPermissions(new String[]{photosPermission()}, SHOW_PHOTOS);
+                return;
+            }
+            Ferry.prefs(this).edit().putBoolean("photos", on).apply();
+            if (!on) Photos.stop();   // a laptop that looks now stops at once
         });
         findViewById(R.id.unpair).setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setTitle("Unpair from " + laptop() + "?")
@@ -180,6 +191,10 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
         screenshotsBody.setText(!canRead && p.getBoolean("screenshots", false)
                 ? "Ferry needs the Photos permission set to \"Allow all\" to notice new screenshots. Open App info > Permissions > Photos."
                 : "Each new screenshot goes to the laptop's clipboard by itself.");
+        photosSwitch.setChecked(Ferry.photosOn(this) && canRead);
+        photosBody.setText(!canRead && p.getBoolean("photos", false)
+                ? "Ferry needs the Photos permission set to \"Allow all\" to show your photos. Open App info > Permissions > Photos."
+                : "Phone photos on the laptop shows your photos in a grid, only while you have it open. This phone shows a notice meanwhile.");
 
         pairing.setVisibility(paired ? View.VISIBLE : View.GONE);
         if (paired) {
@@ -227,11 +242,18 @@ public class SettingsActivity extends Activity implements SharedPreferences.OnSh
     @Override
     public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results);
-        if (request != PHOTOS) return;
         boolean allowed = SyncService.canReadPhotos(this);
-        Ferry.prefs(this).edit().putBoolean("screenshots", allowed).apply();
-        if (allowed) restartSync();
+        if (request == SHOW_PHOTOS) {
+            Ferry.prefs(this).edit().putBoolean("photos", allowed).apply();
+        } else if (request == PHOTOS) {
+            Ferry.prefs(this).edit().putBoolean("screenshots", allowed).apply();
+            if (allowed) restartSync();
+        }
         render();
+    }
+
+    private static String photosPermission() {
+        return Build.VERSION.SDK_INT >= 33 ? Manifest.permission.READ_MEDIA_IMAGES : Manifest.permission.READ_EXTERNAL_STORAGE;
     }
 
     private void restartSync() {

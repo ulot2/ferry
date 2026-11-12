@@ -91,7 +91,7 @@ The pill in the top-right corner of the chart shows the connection:
 - **Adrift** (red dot): offline. Ferry tries again every 5 seconds. When the device changes network or wakes from sleep, Ferry connects again at once.
 - **Connecting**, **Paused** or **Not paired** (grey dot).
 
-The main screen shows only the chart, the last crossing and the logbook. On the phone it also shows **Send clipboard** and **Helm** (see [Helm](#helm-the-phone-as-a-remote)), and on the laptop **Send a file…**. When something needs action, one notice shows under it, for example an update or background use.
+The main screen shows only the chart, the last crossing and the logbook. On the phone it also shows **Send clipboard** and **Helm** (see [Helm](#helm-the-phone-as-a-remote)), and on the laptop **Send a file…** and **Phone photos…** (see [Phone photos](#phone-photos)). When something needs action, one notice shows under it, for example an update or background use.
 
 Everything that you set once is in **Settings**. To open it, click or tap the round button with three sliders, right of the pill. In the Settings of each app:
 
@@ -246,6 +246,34 @@ If the pointer moves too slowly or too fast, change **Pointer speed** under the 
 - Some public and guest Wi-Fi networks stop devices from connecting to each other. Helm does not work on such a network.
 - A laptop or phone with an older Ferry does not answer Helm. Update both apps.
 
+## Phone photos
+
+Phone photos shows the photos of the phone in a grid on the laptop, newest first. It works only when both devices are on the same Wi-Fi. It also needs the internet for about one second to start.
+
+### Turn on Phone photos
+
+Phone photos is off until you turn it on, on the phone.
+
+1. On the phone, open Ferry **Settings**.
+2. Turn on **Let the laptop see photos**.
+3. If Android asks for the Photos permission, choose **Allow all**.
+
+### Use Phone photos
+
+1. On the laptop, click **Phone photos…** in the Ferry window or in the tray menu.
+2. To open a photo, double-click it. You can also select it and press Enter.
+3. To copy photos to a folder or to the desktop, select them and drag them there. Hold the mouse button until the photos come from the phone.
+
+While the window is open, the phone shows a notification that the laptop is looking at your photos. To stop it from the phone, tap **Stop** in that notification. To stop it from the laptop, close the window.
+
+### Limits of Phone photos
+
+- Phone photos shows photos only, not videos. It has no albums and no search.
+- Android removes the location from each photo that Ferry reads, because Ferry does not ask for the location permission.
+- A photo that you open or drag goes into a temporary folder on the laptop. Ferry empties this folder the next time you open Phone photos.
+- If you release the mouse button before the photos come, drag them again. They are ready then.
+- A phone with an older Ferry does not answer. Update both apps.
+
 ## Updates
 
 Both apps look for a newer release on GitHub:
@@ -262,6 +290,7 @@ Your pairing and history stay after an update.
 - A direct file crosses your own Wi-Fi, encrypted. Another device on the network can see that a transfer occurs, but it cannot read the file. The phone accepts a connection only from a device that has your pairing code. The laptop connects only to a private address on a network that the laptop is on, never to the internet.
 - The pairing code is the only secret. A person who has the code can read your clipboard text and send text to it. Do not share the code or the QR code.
 - Helm gives more control. After you allow Helm on the laptop, a person who has the pairing code and is on the same Wi-Fi can control the laptop. The tray icon turns magenta and a pop-up shows while a phone has the helm. Each Helm message is encrypted with your key and numbered, so a recorded message cannot be sent again.
+- Phone photos is off until you turn it on, on the phone. When it is on, a person who has the pairing code and is on the same Wi-Fi can see your photos. The phone shows a notification while the laptop looks, with a **Stop** button. The photos cross your Wi-Fi encrypted, and do not go through ntfy.sh.
 - If the code leaks, click **Reset pairing** in Settings in the laptop window. Then scan the new code with the phone.
 - When you unpair on one device, the other device unpairs too: **Reset pairing** on the laptop, or **Unpair** in Settings on the phone. The device that unpairs must be online to tell the other one. After an unpair, the laptop shows a new code to scan.
 - On the laptop, Ferry does not send copies that apps mark as private or as "do not share to other devices" (password managers do this).
@@ -334,7 +363,8 @@ The Android build needs JDK 21, the Android SDK, and Gradle 8.14. Copy the key t
 | `desktop/` | Windows tray app (C#, Windows Forms) |
 | `tools/install-ferry-auto.ps1` | Installs Ferry Auto from a Windows computer |
 | `src/main/java/app/ferry/Crypto.java`, `desktop/Crypto.cs` | The encryption. Both files must stay identical in behavior. |
-| `src/main/java/app/ferry/Session.java`, `desktop/Session.cs` | The session link: one encrypted connection that stays open on the same Wi-Fi, for Helm |
+| `src/main/java/app/ferry/Session.java`, `desktop/Session.cs` | The session link: one encrypted connection that stays open on the same Wi-Fi, for Helm and Phone photos |
+| `src/main/java/app/ferry/Photos.java`, `desktop/PhotosWindow.cs` | Phone photos: the photo list, thumbnails and files on the phone, and the grid on the laptop. Both files must use the same message kinds. |
 | `src/main/java/app/ferry/HelmActivity.java`, `desktop/Helm.cs` | Helm: the remote screen on the phone, and the input on the laptop. Both files must use the same message kinds. |
 | `PRODUCT.md` | Who Ferry is for and what it must do |
 | `DESIGN.md` | The Nautical chart design: colors for light and dark mode, type, and the chart |

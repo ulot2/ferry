@@ -148,7 +148,7 @@ sealed class Sync
                 {
                     case "accept": Lan.Answer(message); break;
                     case "offer": FileOffered?.Invoke(message, at); break;
-                    case "session": SessionOffered?.Invoke(message); break;
+                    case "session": if (!Session.Answer(message)) SessionOffered?.Invoke(message); break;
                 }
             }
             catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)
@@ -223,7 +223,7 @@ sealed class Sync
 
     public static Task Send(string code, string text, string tags = "laptop") => Post(code, Crypto.Seal(code, text), tags);
 
-    /// <summary>A message that sets up a direct Wi-Fi transfer: "request" (the laptop sends) or "nolan" (the laptop cannot connect).</summary>
+    /// <summary>A message that sets up a direct Wi-Fi connection: "request" (the laptop sends a file), "nolan" (the laptop cannot connect) or "open" (a session).</summary>
     public static Task PostLan(string code, object message) => Post(code, Crypto.SealLan(code, JsonSerializer.Serialize(message)), "laptop,lan");
 
     static async Task Post(string code, string sealedText, string tags)

@@ -21,7 +21,7 @@ sealed class MainWindow : Form
     readonly TrayApp app;
     readonly TextBox code;
     readonly ListBox history;
-    readonly PillButton settings, copy, done, sendFile, clear, settingsDone, themeSystem, themeLight, themeDark, showCode, reset, checkUpdate;
+    readonly PillButton settings, copy, done, sendFile, photos, clear, settingsDone, themeSystem, themeLight, themeDark, showCode, reset, checkUpdate;
     readonly SwitchRow pause, popups, images, autostart, helm;
     List<Crossing> earlier = [];
     List<object> rows = [];   // the logbook as shown: a string is a day heading (TODAY, YESTERDAY, EARLIER), a Crossing is an entry
@@ -91,6 +91,8 @@ sealed class MainWindow : Form
         Controls.Add(history);
         sendFile = AddButton("Send a file…", PillKind.Chip, 22, 568, 124, 36);
         sendFile.Click += (_, _) => app.PickFiles();
+        photos = AddButton("Phone photos…", PillKind.Chip, 154, 568, 136, 36);
+        photos.Click += (_, _) => app.ShowPhotos();
 
         // Settings view: a page of its own, without the chart band. Titles, section names and hints are painted.
         settingsDone = AddButton("Done", PillKind.Link, 338, 14, 64, 28);
@@ -329,7 +331,7 @@ sealed class MainWindow : Form
 
         code.Visible = copy.Visible = view == View.Pairing;
         done.Visible = view == View.Pairing && (st.Peer != "" || settingsShown);
-        foreach (Control ctl in new Control[] { clear, sendFile })
+        foreach (Control ctl in new Control[] { clear, sendFile, photos })
             ctl.Visible = view == View.Logbook;
         foreach (Control ctl in new Control[] { settingsDone, themeSystem, themeLight, themeDark, pause, popups, images, autostart, helm, showCode, checkUpdate })
             ctl.Visible = view == View.Settings;

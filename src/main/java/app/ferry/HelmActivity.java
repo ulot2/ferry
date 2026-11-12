@@ -219,7 +219,7 @@ public class HelmActivity extends Activity {
                 clearField();
                 show(true, null);
                 new Thread(() -> {
-                    got.read();
+                    got.read(null);
                     runOnUiThread(() -> {
                         if (session != got) return;
                         session = null;

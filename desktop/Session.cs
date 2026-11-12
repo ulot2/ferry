@@ -1,22 +1,27 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace Ferry;
 
 /// <summary>
-/// A session: one encrypted connection that stays open while a feature is in use (Helm). As for files, the phone
-/// listens and the laptop connects (Lan). The phone (Session.java) must use the same wire format:
+/// A session: one encrypted connection that stays open while a feature is in use (Helm, Phone photos). As for files,
+/// the phone listens and the laptop connects (Lan). The phone (Session.java) must use the same wire format:
 /// the laptop sends the hello of Lan; then each side sends frames: a 4-byte big-endian length, then the frame sealed
 /// with Crypto.SealSession (one byte for the kind of message, then the body). Each side numbers its own frames from 0.
 /// Both sides send a ping every 5 s, and 15 s without a frame ends the session.
+/// The phone starts a session with a "session" message through ntfy.sh (Helm). The laptop asks for one with "open" (Open);
+/// the phone answers with "session", or with "session" and a "why" when it says no.
 /// </summary>
 sealed class Session : IDisposable
 {
     public const byte Ping = 0;
     const byte FromPhone = 0, ToPhone = 1;
-    const int MaxBody = 64 * 1024;
+    public const int MaxBody = 64 * 1024;
     static readonly TimeSpan Quiet = TimeSpan.FromSeconds(15);
+    static readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> waiting = new();
     readonly NetworkStream net;
     readonly string code;
     readonly byte[] id;
@@ -25,6 +30,49 @@ sealed class Session : IDisposable
     long sent, got;
 
     Session(NetworkStream net, string code, byte[] id) => (this.net, this.code, this.id) = (net, code, id);
+
+    /// <summary>
+    /// Asks the phone for a session (what: "photos") and connects to it. Returns the session, or null and why not:
+    /// "off", "permission" or "nowifi" from the phone; "offline" when the request did not go out; "noanswer" when the phone
+    /// did not answer in 10 s (off, or an older Ferry); "noconnect" when it answered but could not be reached.
+    /// </summary>
+    public static async Task<(Session? Session, string Why)> Open(string code, string what)
+    {
+        string key = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+        var answer = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        waiting[key] = answer;
+        JsonElement reply;
+        try
+        {
+            await Sync.PostLan(code, new { t = "open", id = key, @for = what });
+            reply = await answer.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch (TimeoutException)
+        {
+            return (null, "noanswer");
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            return (null, "offline");
+        }
+        finally
+        {
+            waiting.TryRemove(key, out _);
+        }
+        if (reply.TryGetProperty("why", out var why) && why.GetString() is { Length: > 0 } no) return (null, no);
+        try
+        {
+            return await Join(code, reply) is { } session ? (session, "") : (null, "noconnect");
+        }
+        catch (Exception e) when (e is IOException or SocketException)
+        {
+            return (null, "noconnect");
+        }
+    }
+
+    /// <summary>A "session" message from the phone. True when it answers an Open of this laptop; false when the phone starts one itself.</summary>
+    public static bool Answer(JsonElement message) =>
+        message.TryGetProperty("id", out var id) && id.GetString() is { } key && waiting.TryRemove(key, out var answer) && answer.TrySetResult(message);
 
     /// <summary>Connects to a session that the phone offered. Null when the offer is not valid or the phone cannot be reached.</summary>
     public static async Task<Session?> Join(string code, JsonElement offer)
@@ -91,6 +139,10 @@ sealed class Session : IDisposable
             Dispose();
         }
     }
+
+    /// <summary>Sends a message and does not wait. A failed send ends the session, and Run returns.</summary>
+    public void Post(byte kind, byte[] body) =>
+        _ = Send(kind, body).ContinueWith(t => { _ = t.Exception; Dispose(); }, TaskContinuationOptions.NotOnRanToCompletion);
 
     async Task Send(byte kind, byte[] body)
     {

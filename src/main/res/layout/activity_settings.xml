@@ -124,6 +124,15 @@ Sections: Appearance, Syncing, Pairing, Keep Ferry running, About. Same Nautical
             <TextView
                 android:id="@+id/screenshotsBody"
                 style="@style/Ferry.Hint" />
+
+            <Switch
+                android:id="@+id/photosSwitch"
+                style="@style/Ferry.Switch"
+                android:text="Let the laptop see photos" />
+
+            <TextView
+                android:id="@+id/photosBody"
+                style="@style/Ferry.Hint" />
         </LinearLayout>
 
         <!-- Pairing: only while paired. Before that, the chart screen shows the pairing steps. -->

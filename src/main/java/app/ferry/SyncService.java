@@ -51,6 +51,8 @@ import java.util.function.IntConsumer;
 /** Keeps a connection to ntfy.sh open and puts whatever the laptop copies into this phone's clipboard. */
 public class SyncService extends Service {
     private static final String CHANNEL = "sync", CROSSINGS = "crossings";
+    static final String STOP_PHOTOS = "app.ferry.STOP_PHOTOS";
+    private static final int PHOTOS_SHOWN = 6;   // notification id while the laptop looks at photos
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile boolean running;
     private volatile HttpURLConnection con;
@@ -70,6 +72,7 @@ public class SyncService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && STOP_PHOTOS.equals(intent.getAction())) Photos.stop();
         getSystemService(NotificationManager.class).createNotificationChannel(
                 new NotificationChannel(CHANNEL, "Connection", NotificationManager.IMPORTANCE_MIN));
         startForeground(1, status(label));
@@ -299,6 +302,7 @@ public class SyncService extends Service {
             String type = lan.optString("t");
             if (type.equals("nolan")) Lan.cancel(lan.optString("id"));
             else if (type.equals("request")) new Thread(() -> receiveDirect(code, lan, time(m)), "ferry-lan").start();
+            else if (type.equals("open")) new Thread(() -> openSession(lan), "ferry-session").start();
         } catch (org.json.JSONException e) {
             Log.w("Ferry", "Wi-Fi message unreadable: " + e);
         }
@@ -333,6 +337,42 @@ public class SyncService extends Service {
         } catch (IOException e) {
             Lan.cancel(key);   // the accept did not go out: stop listening
             Log.w("Ferry", "Wi-Fi file not received: " + e);
+        }
+    }
+
+    /**
+     * The laptop asks for a session. Only "photos" for now, and only while "Let the laptop see photos" is on and Ferry may
+     * read the photos. Otherwise the phone tells the laptop why not. While the laptop looks, a notification says so and can stop it.
+     */
+    private void openSession(JSONObject open) {
+        byte[] id = Lan.unhex(open.optString("id"));
+        if (id == null) return;
+        String what = open.optString("for");
+        String why = !what.equals("photos") ? "unknown" : !Ferry.photosOn(this) ? "off" : !canReadPhotos(this) ? "permission" : null;
+        Session s;
+        try {
+            s = Session.answer(this, id, what, why, 15_000);
+        } catch (IOException e) {
+            Log.w("Ferry", "session not answered: " + e);
+            return;
+        }
+        if (s == null) return;
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        crossingsChannel(nm);   // a visible notice, not the quiet status channel: the user must see that the laptop looks
+        PendingIntent stop = PendingIntent.getService(this, PHOTOS_SHOWN,
+                new Intent(this, SyncService.class).setAction(STOP_PHOTOS), PendingIntent.FLAG_IMMUTABLE);
+        String who = peer();
+        nm.notify(PHOTOS_SHOWN, new Notification.Builder(this, CROSSINGS)
+                .setSmallIcon(R.drawable.ic_tile)
+                .setContentTitle(Character.toUpperCase(who.charAt(0)) + who.substring(1) + " is looking at your photos")
+                .setContentText("Ferry lets the laptop see them while its Phone photos window is open.")
+                .setOngoing(true)
+                .addAction(new Notification.Action.Builder(null, "Stop", stop).build())
+                .build());
+        try {
+            Photos.serve(this, s);
+        } finally {
+            nm.cancel(PHOTOS_SHOWN);
         }
     }
 
@@ -484,10 +524,7 @@ public class SyncService extends Service {
     /** With open set, tapping the notification (or the action button with openLabel) opens the link or the file. */
     private void notifyCrossing(String title, String text, Bitmap picture, PendingIntent open, String openLabel) {
         NotificationManager nm = getSystemService(NotificationManager.class);
-        NotificationChannel ch = new NotificationChannel(CROSSINGS, "Crossings", NotificationManager.IMPORTANCE_HIGH);
-        ch.setSound(null, null);
-        ch.enableVibration(false);
-        nm.createNotificationChannel(ch);
+        crossingsChannel(nm);
         Notification.Builder b = new Notification.Builder(this, CROSSINGS)
                 .setSmallIcon(R.drawable.ic_tile)
                 .setContentTitle(title)
@@ -500,6 +537,14 @@ public class SyncService extends Service {
             b.setContentIntent(open).addAction(new Notification.Action.Builder(null, openLabel, open).build());
         }
         nm.notify(2, b.build());
+    }
+
+    /** Pop-ups without sound: what crossed, and while the laptop looks at photos. */
+    private static void crossingsChannel(NotificationManager nm) {
+        NotificationChannel ch = new NotificationChannel(CROSSINGS, "Crossings", NotificationManager.IMPORTANCE_HIGH);
+        ch.setSound(null, null);
+        ch.enableVibration(false);
+        nm.createNotificationChannel(ch);
     }
 
     private void state(String status, String label) {

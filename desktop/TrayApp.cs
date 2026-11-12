@@ -31,6 +31,7 @@ sealed class TrayApp : ApplicationContext
     readonly ToolStripMenuItem helmItem = new("Let the phone control this laptop") { CheckOnClick = true };
     readonly ToolStripMenuItem endHelmItem = new("End Helm session") { Visible = false };
     Session? helm;   // the phone's Helm session while it is open
+    PhotosWindow? photosWindow;
     readonly System.Windows.Forms.Timer updateTimer = new() { Interval = 12 * 60 * 60 * 1000 };
     MainWindow? window;
     string? last;   // text we last sent or applied, so our own clipboard changes do not echo back
@@ -85,6 +86,7 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(endHelmItem);
         menu.Items.Add(new ToolStripMenuItem("Open Ferry", null, (_, _) => ShowWindow()) { Font = new Font(menu.Font, FontStyle.Bold) });
         menu.Items.Add("Send a file to the phone…", null, (_, _) => PickFiles());
+        menu.Items.Add("Phone photos…", null, (_, _) => ShowPhotos());
         menu.Items.Add(updateItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(pauseItem);
@@ -829,7 +831,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
     }
 
     /// <summary>The name from the phone, made safe for Windows: no folder parts, no forbidden characters, no device names.</summary>
-    static string SafeName(string name)
+    public static string SafeName(string name)
     {
         var bad = Path.GetInvalidFileNameChars();
         string s = new string(Path.GetFileName(name).Select(ch => bad.Contains(ch) ? '_' : ch).ToArray()).Trim().TrimEnd('.');
@@ -850,7 +852,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         if (File.Exists(path)) System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
     }
 
-    static void Open(string path)
+    public static void Open(string path)
     {
         if (path != "" && File.Exists(path)) System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
     }
@@ -964,6 +966,20 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         }
     }
 
+    /// <summary>Phone photos: one window. Before pairing, the main window shows the QR code instead.</summary>
+    public void ShowPhotos()
+    {
+        if (Settings.Peer == "")
+        {
+            ShowWindow();
+            return;
+        }
+        if (photosWindow is null || photosWindow.IsDisposed) photosWindow = new PhotosWindow(Settings.Code, PhoneName);
+        photosWindow.Show();
+        if (photosWindow.WindowState == FormWindowState.Minimized) photosWindow.WindowState = FormWindowState.Normal;
+        photosWindow.Activate();
+    }
+
     void ShowWindow()
     {
         if (window is null || window.IsDisposed) window = new MainWindow(this);
@@ -981,6 +997,7 @@ string from = Settings.Peer == "" ? "your phone" : Settings.Peer;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         sync.Stop();
         helm?.Dispose();
+        photosWindow?.Dispose();
         watcher.Dispose();
         window?.Dispose();
         ExitThread();

@@ -17,9 +17,10 @@ We build the plan in six phases. Each phase is one release that works by itself.
 
 | Phase | State |
 |---|---|
-| 0 | Code written. The laptop side passed tests on the laptop. The phone side is not compiled or tested yet. |
-| 1 | Code written. Not tested on the phone and the laptop together yet. |
-| 2 to 5 | Not started |
+| 0 | Done. The laptop-started session ("open") came with phase 2. |
+| 1 | Done. Helm works on the phone and the laptop together. |
+| 2 | Code written. The laptop side passed tests on the laptop against a fake phone. The phone side is not compiled yet, and the two have not run together. |
+| 3 to 5 | Not started |
 
 Changes to phases 0 and 1 while we built them:
 
@@ -28,6 +29,14 @@ Changes to phases 0 and 1 while we built them:
 - The phone keyboard is a type field on the Helm screen, not a button. The field sends only what changed, so the corrections of the keyboard also reach the laptop.
 - Helm sends only the keys on its screen. The laptop ignores all other keys, so a phone cannot press the Windows key or a shortcut.
 - The ping time is not in a log. We measure it on the real devices before phase 2.
+
+Changes to phase 2 while we built it:
+
+- The phone answers an "open" with a "session" message. When it says no, the message has a "why": "off" (the switch), "permission" (no Photos permission) or "nowifi". The laptop window shows what to do for each.
+- The laptop asks for at most 8 thumbnails at a time, and only for photos that are still on screen. Without this limit, a fast scroll queues hundreds of thumbnails on the phone.
+- The phone sends a full photo part by part, 60 KB at a time, and waits for each part to go. A large photo never sits in memory as a whole.
+- The notification on the phone has a **Stop** button. The switch in Settings also stops a laptop that looks now.
+- The window keeps at most 600 thumbnails in memory. The oldest goes first, and comes again when you scroll back.
 
 ## What the code has today, and what it does not
 
